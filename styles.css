@@ -30,6 +30,7 @@ dialog{width:min(680px,calc(100% - 32px));max-height:88vh;margin:auto;border:1px
 .pattern-form{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:12px 0 20px}
 .pattern-form label{display:grid;gap:7px;flex:1;min-width:130px}.pattern-form small{width:100%;font-size:10px;color:#99939f}
 .pattern-form button{min-height:41px}
+.pattern-catalog{border:1px solid #3b3c46;border-radius:8px;margin:14px 0;padding:12px 14px;font-size:11px}.pattern-catalog summary{cursor:pointer;color:#dedce5;line-height:1.7}.pattern-tiers{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.pattern-tiers span{padding:6px 10px;border:1px solid #3c4256;border-radius:5px;color:#9fabc9;font-size:10px}.pattern-tiers b{color:#d1d7e8;font-weight:500}.pattern-price-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}.pattern-price-form label{display:grid;gap:7px;color:#b2b4c0;font-size:11px}.pattern-price-form input,.pattern-price-form select{width:100%;min-width:0;padding:10px;border:1px solid #45434e;border-radius:6px;background:#191a20;color:#f0edf4;font:inherit}.pattern-price-form small{grid-column:1/-1;color:#8f92a0;line-height:1.8}.pattern-price-form button{align-self:end;min-height:40px;font-size:11px}#seed-form input{font-variant-numeric:tabular-nums}
 footer{flex-wrap:wrap}
 .footer-credits{flex:0 0 100%;display:flex;justify-content:center;flex-wrap:wrap;gap:6px 24px;margin:0;padding-top:2px;color:#858792;font-size:10px;line-height:1.7}
 .footer-credits strong{font-weight:500;color:#b5b6bf}

@@ -2,13 +2,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const {createHash} = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'dist');
 const context = {window:{}};
 vm.runInNewContext(fs.readFileSync(path.join(root, 'data/catalog.js'), 'utf8'), context);
 const data = context.window.CS2_DATA;
 const files = new Set(['index.html', 'styles.css', 'app.js', 'engine.js',
-  'data/catalog.js', 'data/CSGO-API-LICENSE.txt', 'assets/favicon.svg']);
+  'data/catalog.js', 'data/CSGO-API-LICENSE.txt', 'data/FADE-LICENSE.txt', 'assets/favicon.svg']);
 for (const item of [...data.cases, ...Object.values(data.items)]) {
   for (const asset of [item, ...(item.variants || [])]) {
     if (!/^assets\/[a-zA-Z0-9_-]+\.png$/.test(asset.image)) throw new Error('Invalid asset path');
@@ -35,4 +36,11 @@ for (const file of files) {
   bytes+=fs.statSync(destination).size;
 }
 fs.writeFileSync(path.join(output,'.nojekyll'),'');
+// Give each asset its own content version so a deployment cannot mix cached engines/catalogs.
+const html=fs.readFileSync(path.join(output,'index.html'),'utf8').replace(/(src|href)="([^"]+\.(?:js|css))"/g,(match,attribute,file)=>{
+  if(!files.has(file))return match;
+  const hash=createHash('sha256').update(fs.readFileSync(path.join(output,file))).digest('hex').slice(0,12);
+  return `${attribute}="${file}?v=${hash}"`;
+});
+fs.writeFileSync(path.join(output,'index.html'),html);
 console.log(`Built ${files.size+1} static files (${(bytes/1024/1024).toFixed(1)} MiB) in dist/`);

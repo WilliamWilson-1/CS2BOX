@@ -59,6 +59,7 @@ buff = loaded['buff']
 rate = loaded['rates']['CNY'] / loaded['rates']['USD']
 assets = {}
 items = {}
+special_patterns = json.loads((DATA / 'special-patterns.json').read_text('utf-8'))
 
 def image_path(id_, url):
     local = 'assets/' + id_ + '.png'
@@ -109,14 +110,8 @@ def add_skin(skin):
                              'remoteImage': variant['image'] + '/512fx384f'})
         items[id_]['variants'] = sorted(variants, key=lambda v: (v['gem'], v['key']))
         items[id_]['phaseMerged'] = False
-    # Template identification is sourced; multipliers are explicitly fictional simulation settings.
-    patterns = {
-        'AK-47 | Case Hardened': (661, '蓝顶 / Scar 661', 100, 'https://skinport.com/blog/ak-47-case-hardened-tier-guide'),
-        '★ Karambit | Case Hardened': (387, '蓝淬火 / Blue Gem 387', 100, 'https://tradeit.gg/blog/blue-gem-karambit/'),
-    }
-    if skin['name'] in patterns:
-        seed, label, multiplier, source = patterns[skin['name']]
-        items[id_]['patterns'] = [{'seed': seed, 'label': label, 'multiplier': multiplier, 'source': source}]
+    profile = special_patterns['profiles'].get(skin['name'].removeprefix('★ '), {})
+    items[id_].update(profile)
     return id_
 
 cases = []
@@ -139,6 +134,7 @@ for name in NAMES:
     cases.append(case)
 
 snapshot = {'meta': {'builtAt': dt.datetime.now(dt.timezone.utc).isoformat(),
+                    'patternsUpdatedAt': special_patterns['updatedAt'],
                     'priceModified': metadata.get('buff', {}).get('lastModified'),
                     'rateModified': metadata.get('rates', {}).get('lastModified'),
                     'usdCny': rate, 'sources': SOURCES, 'priceSource': 'BUFF163 · CSGO Trader 聚合快照'},

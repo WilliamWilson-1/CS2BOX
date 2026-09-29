@@ -10,7 +10,7 @@
   const KEY = 'caselab.session.v1';
   // CS2 Panorama popup_capability_decodable.css: 6s, cubic-bezier(0.075, 0.82, 0.165, 1).
   const REEL_TIMING = {duration:6000, easing:'cubic-bezier(0.075, 0.82, 0.165, 1)', fill:'forwards'};
-  const defaults = {keyPrice:18, fee:0, gemChance:5, patternMultipliers:{}, casePrices:{}, fast:false, selected:D.cases[0].id};
+  const defaults = {keyPrice:18, fee:0, gemChance:5, patternMultipliers:{}, patternPrices:{}, casePrices:{}, fast:false, selected:D.cases[0].id};
   let settings = {...defaults}, records = [], quantity = 1, busy = false, auto = false, remaining = 0;
   let view = 'lab', contentMode = 'normal', pageSize = 100, animation = null, lastRevealed = null, toastTimer, autoTimer;
   let storageWarning = false;
@@ -34,7 +34,8 @@
       if (caseById[s.selected]) settings.selected=s.selected;
       settings.fast=!!s.fast;
       if (Number.isFinite(s.gemChance) && s.gemChance>=0 && s.gemChance<=100) settings.gemChance=s.gemChance;
-      settings.patternMultipliers=Object.fromEntries(Object.entries(s.patternMultipliers||{}).filter(([key,v])=>Number.isFinite(v)&&v>=1&&v<=10000&&Object.values(D.items).some(item=>item.patterns?.some(p=>`${item.id}:${p.seed}`===key))));
+      settings.patternMultipliers=Object.fromEntries(Object.entries(s.patternMultipliers||{}).filter(([key,v])=>{const [id,seed]=key.split(':');return Number.isFinite(v)&&v>=1&&v<=10000&&D.items[id]&&E.patternInfo(D.items[id],Number(seed));}));
+      settings.patternPrices=Object.fromEntries(Object.entries(s.patternPrices||{}).filter(([key,v])=>{const [id,seed,st,wear]=key.split(':');return Number.isFinite(v)&&v>=0&&v<=1e9&&D.items[id]&&E.patternInfo(D.items[id],Number(seed))&&['0','1'].includes(st)&&['0','1','2','3','4'].includes(wear);}));
       settings.casePrices=Object.fromEntries(Object.entries(s.casePrices||{}).filter(([id,v])=>caseById[id] && Number.isFinite(v) && v>=0 && v<=100000));
     }
   } catch { setTimeout(()=>toast('无法读取本地存档，当前实验仍可正常使用。'),100); }
@@ -129,7 +130,7 @@
     const prices=item.prices[0].filter(p=>p!==null);
     const min=prices.length ? Math.min(...prices) : null;
     const head=record ? (record.float===null?'无涂装':E.WEARS[record.wear]) : tier.name;
-    return `<button class="skin-card" style="--rarity:${tier.color}" data-skin="${item.id}" ${record?`data-record="${record.index}"`:''} aria-label="查看 ${esc(item.name)} 详情"><span class="card-top"><span>${head}</span>${record?.stattrak?'<span class="st-badge">ST™</span>':`<span>${record?'#'+record.index:chance===null?'':pct(chance)}</span>`}</span><span class="card-glow"></span>${img(item)}<div class="skin-weapon">${esc(item.weapon)}</div><div class="skin-finish">${esc(item.finish)}</div>${record?.simulation?'<small class="simulation-label">模拟估价</small>':''}<div class="skin-price">${record?`<span>${money(record.value)}</span><span class="${colorClass(record.profit)}">${money(record.profit,true)}</span>`:`<span>${min===null?'暂无报价':money(E.cents(min))}</span><small>${min===null?'待补充':item.variants?.length?'含独立相位':item.patterns?.length?'含模板估价':'参考价起'}</small>`}</div></button>`;
+    return `<button class="skin-card" style="--rarity:${tier.color}" data-skin="${item.id}" ${record?`data-record="${record.index}"`:''} aria-label="查看 ${esc(item.name)} 详情"><span class="card-top"><span>${head}</span>${record?.stattrak?'<span class="st-badge">ST™</span>':`<span>${record?'#'+record.index:chance===null?'':pct(chance)}</span>`}</span><span class="card-glow"></span>${img(item)}<div class="skin-weapon">${esc(item.weapon)}</div><div class="skin-finish">${esc(item.finish)}</div>${record?.simulation?'<small class="simulation-label">模拟估价</small>':''}<div class="skin-price">${record?`<span>${money(record.value)}</span><span class="${colorClass(record.profit)}">${money(record.profit,true)}</span>`:`<span>${min===null?'暂无报价':money(E.cents(min))}</span><small>${min===null?'待补充':item.variants?.length?'含独立相位':item.patterns?.length||item.fade?'含模板估价':'参考价起'}</small>`}</div></button>`;
   }
   function renderContents() {
     const c=currentCase(), ids=contentMode==='normal'?c.items:c.rare;
@@ -351,30 +352,50 @@
       ${age>2?`<div class="notice">当前快照距今约 ${Math.floor(age)} 天。请更新数据后再比较价格。</div>`:''}
       <h3>品质概率 · 每次独立抽取</h3><table class="modal-table"><thead><tr><th>品质</th><th>权重</th><th>开出概率</th></tr></thead><tbody>${E.TIERS.map(t=>`<tr><td><span style="color:${t.color}">●</span> ${t.name}</td><td>${t.weight} / 782</td><td>${pct(t.weight/782)}</td></tr>`).join('')}</tbody></table><p>按完美世界公开品质比例 5:1、特殊与隐秘 2:5 推导，使用整数权重而非四舍五入后的百分比。枪械同品质内等概率；支持的枪械与刀具有 10% StatTrak™ 概率，手套无 StatTrak™。没有连败补偿或保底。</p><p><a href="https://www.csgo.com.cn/hd/1707/lotteryrecords/index.html" target="_blank" rel="noopener noreferrer">国服概率公示 ↗</a></p>
       <h3>磨损概率 · 社区近似模型</h3><table class="modal-table"><thead><tr><th>基准磨损</th><th>归一化 Float 区间</th><th>模型权重</th></tr></thead><tbody>${E.WEARS.map((w,i)=>`<tr><td>${w}</td><td>${E.EDGES[i].toFixed(2)} – ${E.EDGES[i+1].toFixed(2)}</td><td>${pct(E.WEIGHTS[i])}</td></tr>`).join('')}</tbody></table><p>参考 CSFloat 2020 年统计：先按权重选段，在段内均匀生成 u，再映射 Float = min + u × (max − min)。饰品磨损概率据其范围重新积分，不能把 3% / 24% / 33% / 24% / 16% 直接套给每件饰品。该模型近似统计形状，不复刻服务端 RNG 或区间缝隙，不属于 Valve 官方磨损概率。</p><p><a href="https://blog.csfloat.com/analysis-of-float-value-and-paint-seed-distribution-in-cs-go/" target="_blank" rel="noopener noreferrer">CSFloat 分布研究 ↗</a></p>
-      <div class="notice">金色池先等概率选刀型/手套型号，再等概率选涂装，此为模拟假设。多普勒按具体相位使用独立报价与预览图。抽中多普勒后，宝石相位合计默认占 5%（可在设置中调整），普通相位均分其余概率、宝石之间均分；此为模拟设定，并非官方概率。AK 淬火 661、爪子刀淬火 387 使用同磨损 / StatTrak 基价 × 可调倍数的模拟估价，默认 100 倍不是市场报价。未模拟超低磨溢价。图案种子 0–999。缺失报价保留为空，并提示盈亏未完整估值。</div>
+      <div class="notice">金色池先等概率选刀型/手套型号，再等概率选涂装，此为模拟假设。多普勒按具体相位使用独立报价与预览图。抽中多普勒后，宝石相位合计默认占 5%（可在设置中调整），普通相位均分其余概率、宝石之间均分；此为模拟设定，并非官方概率。淬火按各武器的社区 T1–T4 表识别，T1 可逐模板设定独立模拟价；还收录金淬火、冰火、屠夫钻石/心形、部分血网、月升星星、红色和服、印花及部分枪皮图案。模板溢价与独立金额均明确标注为模拟估价，不是市场报价。渐变采用 chescos 开源算法（Skinport / CSFloat 口径），不等同于 BUFF 百分比；不适用于渐变手套。未收录的图案按基础报价结算。未模拟超低磨溢价。图案种子 0–999。缺失报价保留为空，并提示盈亏未完整估值。</div>
       <h3>盈亏如何计算</h3><p>单次盈亏 = 参考价 × (1 − 手续费率) − 箱价 − 钥匙费；货币按分计算。历史记录锁定开箱当时的价格和设置。参考在售价不等于实际可售金额，所有开箱只在本地模拟。</p><p>在项目目录运行 <code>python scripts/build_data.py --refresh --images</code> 可重新获取公开快照和贴图。刷新页面后新开箱使用新数据，已保存的旧记录保持原值。</p></div>`);
+  }
+  function patternPanel(base, pattern, record, selectedSeed) {
+    const supported=base.patterns?.length||base.fade;
+    if (!supported) {
+      return /Slaughter|Crimson Web|Grinder|Gloves \| Fade|Hydra Gloves \| Case Hardened/.test(base.en)
+        ? '<p class="notice">此涂装会随模板变化，当前尚无已核实的完整分档表，暂按基础报价结算。</p>' : '';
+    }
+    const input=!record?`<form id="seed-form" class="pattern-form"><label>按模板编号检视<input name="seed" aria-label="模板编号" type="number" min="0" max="999" step="1" required value="${selectedSeed??base.patterns?.[0]?.seed??0}"></label><button type="submit" class="secondary-button">检视模板</button></form>`:'';
+    const t1=(base.patterns||[]).filter(p=>p.category==='blue-gem'&&p.tier===1);
+    const tiers=(base.patterns||[]).filter(p=>p.category==='blue-gem');
+    const catalog=!record&&t1.length?`<details class="pattern-catalog"><summary>T1 独立模板模拟价 · 共 ${t1.length} 个</summary><p>以下为普通久经沙场的模拟价，每个模板可单独检视并设置各磨损 / StatTrak 的金额，均不代表真实成交价。</p><table class="modal-table"><thead><tr><th>模板</th><th>普通久经沙场 · 模拟价</th></tr></thead><tbody>${t1.map(p=>`<tr><td><button class="text-button" data-inspect-seed="${p.seed}">#${p.seed} ↗</button></td><td>${money(E.quote(base,{seed:p.seed,wear:2},settings).value)}</td></tr>`).join('')}</tbody></table></details>`:'';
+    const tierSummary=tiers.length?`<div class="pattern-tiers">${[1,2,3,4].map(t=>`<span>T${t} <b>${tiers.filter(p=>p.tier===t).length}</b> 个</span>`).join('')}</div>`:'';
+    if (!pattern) return input+tierSummary+catalog+(selectedSeed!==null?'<p class="notice">此编号未命中已收录的特殊模板，使用普通基础报价。</p>':'');
+    const multiplier=settings.patternMultipliers[`${base.id}:${pattern.seed}`]??pattern.multiplier;
+    const wears=E.wearProbabilities(base);
+    const description=pattern.category==='fade'
+      ? '渐变比例采用 Skinport / CSFloat 社区算法，与 BUFF 的显示口径可能不同。默认 95% 以下不加价，95% / 98% / 99% / 99.5% 起分别模拟 ×1.15 / ×1.3 / ×1.5 / ×1.8。'
+      : '模板分档采用所列社区指南，并非 Valve 官方或 BUFF 统一标准。T1 按具体武器与编号分别设价。';
+    return input+tierSummary+`<div class="notice simulation-notice"><strong>${esc(pattern.label)}${pattern.label.includes('#')?'':` · #${pattern.seed}`}</strong><br>${description}<br>默认按同磨损 / StatTrak 基价 × ${multiplier} 模拟；已设置的独立模板价优先。溢价均为游戏设定，不是模板市场报价。单一模板概率为抽中此涂装后的 0.10%。<br>贴图是通用涂装预览，不复现此种子的实际纹路。<br><a href="${esc(pattern.source)}" target="_blank" rel="noopener noreferrer">模板识别来源 ↗</a></div>`+
+      (!record?`<details class="pattern-catalog"><summary>调整 #${pattern.seed} 的模拟价格</summary><form id="pattern-price-form" class="pattern-price-form"><label>磨损<select name="wear" aria-label="模板定价磨损">${E.WEARS.map((w,i)=>wears[i]?`<option value="${i}" ${i===2?'selected':''}>${w}</option>`:'').join('')}</select></label><label>版本<select name="st" aria-label="模板定价版本"><option value="0">普通</option>${base.stattrak?'<option value="1">StatTrak™</option>':''}</select></label><label>独立模拟价（¥）<input name="price" aria-label="独立模板模拟价" type="number" min="0" max="1000000000" step="0.01" required></label><button type="submit" class="secondary-button">保存独立价格</button><button id="restore-pattern-price" type="button" class="text-button">恢复此规格默认价格</button><small>仅影响今后开出的同一武器、模板、磨损与版本；历史记录保持原价。</small></form><form id="pattern-form" class="pattern-form"><label>未单独定价规格的模拟倍数<input aria-label="模拟溢价倍数" name="multiplier" type="number" min="1" max="10000" step="0.01" required value="${multiplier}"></label><button class="secondary-button" type="submit">保存倍数</button></form></details>`:'')+catalog;
   }
   function skinModal(id, recordIndex, selected) {
     const base=D.items[id], r=recordIndex?records.find(r=>r.index===Number(recordIndex)):null;
-    const choice=selected ?? (r ? (r.variantKey || (base.patterns?.some(p=>p.seed===r.seed)?`seed:${r.seed}`:'')) : base.variants?.[0]?.key || '');
-    const pattern=base.patterns?.find(p=>`seed:${p.seed}`===choice);
+    const choice=selected ?? (r ? (r.variantKey || (E.patternInfo(base,r.seed)?`seed:${r.seed}`:'')) : base.variants?.[0]?.key || (base.fade?'seed:0':''));
+    const selectedSeed=choice.startsWith('seed:')?Number(choice.slice(5)):null;
+    const pattern=E.patternInfo(base,selectedSeed);
     const variant=base.variants?.find(v=>v.key===choice);
     const quoteAt=(wear,stattrak)=>E.quote(base,{wear,stattrak,seed:pattern?.seed,variantKey:variant?.key},settings);
     const item={...appearance(base,{variantKey:variant?.key,specialLabel:variant?.label||pattern?.label}),
       prices:[false,true].map(st=>[0,1,2,3,4].map(w=>{const value=quoteAt(w,st).value;return value===null?null:value/100;}))};
     const variants=base.variants||[], patterns=base.patterns||[];
     const variantOdds=E.variantProbabilities(base,settings.gemChance);
-    const multiplier=pattern?quoteAt(0,false).multiplier:null;
     const c=r?caseById[r.caseId]:currentCase();
     const probabilities=E.wearProbabilities(item), chance=E.itemProbabilities(c,D.items)[id] || 0;
     modal(`<div class="detail-hero"><div><span class="detail-tier" style="--rarity:${E.TIERS[item.rarity].color}">${E.TIERS[item.rarity].name}${r?.stattrak?' · StatTrak™':''}</span><div class="eyebrow">${esc(item.weapon)}</div><h2 class="modal-title">${esc(item.finish)}</h2><span class="muted" style="font-size:10px">${esc(item.en)}</span></div>${img(item,'',false)}</div><div class="modal-body">
       ${r?`<div class="notice">${specialBadge(r)}第 ${r.index} 箱 · ${esc(c.name)}<br>${r.float===null?'无磨损等级':`${E.WEARS[r.wear]} · Float ${r.float.toFixed(8)}`} · 图案 #${r.seed}<br>${r.simulation?'当时模拟估价':'当时参考价'} ${money(r.value)} · 成本 ${money(r.cost)} · 手续费 ${r.feeRate}%<br>单次盈亏 <strong class="${colorClass(r.profit)}">${money(r.profit,true)}</strong><br><small>${esc(r.priceSource||'历史聚合快照（未细分相位）')}<br>记录时间 ${esc(new Date(r.time).toLocaleString('zh-CN'))}</small></div>`:''}
-      ${!r&&(variants.length||patterns.length)?`<div class="variant-panel"><label for="special-select">相位 / 特殊模板</label><select id="special-select">${variants.length?'':`<option value="">普通图案 · 基础报价</option>`}${variants.map(v=>`<option value="${esc(v.key)}" ${choice===v.key?'selected':''}>${esc(v.label)}${v.gem?' · 宝石相位':''}</option>`).join('')}${patterns.map(p=>`<option value="seed:${p.seed}" ${pattern===p?'selected':''}>${esc(p.label)} · 模拟估价</option>`).join('')}</select></div>`:''}
+      ${!r&&(variants.length||patterns.length)?`<div class="variant-panel"><label for="special-select">相位 / 特殊模板</label><select id="special-select">${variants.length?'':`<option value="">普通图案 · 基础报价</option>`}${variants.map(v=>`<option value="${esc(v.key)}" ${choice===v.key?'selected':''}>${esc(v.label)}${v.gem?' · 宝石相位':''}</option>`).join('')}${patterns.map(p=>`<option value="seed:${p.seed}" ${selectedSeed===p.seed?'selected':''}>${p.label.includes('#')?'':`#${p.seed} · `}${esc(p.label)} · 模拟估价</option>`).join('')}</select></div>`:''}
       ${variant?`<div class="notice">${esc(variant.label)} · 独立相位报价 · ${dateLabel}<br>抽中此多普勒后，相位占比 ${pct(variantOdds[variants.indexOf(variant)])}（模拟设定，可在模拟设置中调整宝石总占比）。缺失报价保留为空。</div>`:''}
-      ${pattern?`<div class="notice simulation-notice"><strong>模拟估价 · ${esc(pattern.label)}</strong><br>同磨损 / StatTrak 普通淬火基价 × ${multiplier}。默认 100 倍仅为游戏模拟设定，不是该模板的市场报价。<br>命中种子 #${pattern.seed} 才生效，抽中此涂装后模板概率 0.10%。贴图为通用涂装预览，不复现该种子的纹路。<br><a href="${esc(pattern.source)}" target="_blank" rel="noopener noreferrer">模板识别依据 ↗</a>（该来源不提供本模拟倍数）</div>${!r?`<form id="pattern-form" class="pattern-form"><label>模拟溢价倍数<input aria-label="模拟溢价倍数" name="multiplier" type="number" min="1" max="10000" step="0.1" required value="${multiplier}"></label><button class="secondary-button" type="submit">保存倍数</button><small>只影响后续开箱，历史记录保留原估值。</small></form>`:''}`:''}
+      ${patternPanel(base,pattern,r,selectedSeed)}
       <p>当前箱中基础掉落概率 <strong>${pct(chance)}</strong>（含普通与 StatTrak™ 合计）${item.stattrak?' · 其中 StatTrak™ 占 10%':''}。${item.rarity===4?'金色池内部采用型号 / 涂装均分假设。':''}</p>
       ${item.min===null?'<p>原版刀无磨损等级，所有报价均指同一件原版物品。</p>':`<h3>磨损范围 ${item.min.toFixed(2)} – ${item.max.toFixed(2)}</h3>${wearMeter(item,r)}`}
-      <h3>${pattern?'按磨损模拟估价':'按磨损参考价'} <span class="muted" style="font-size:10px">${pattern?'模拟倍数 × BUFF 基价':'BUFF 聚合'} · ${dateLabel}</span></h3><table class="modal-table"><thead><tr><th>磨损</th><th>普通</th><th>StatTrak™</th><th>条件磨损概率</th></tr></thead><tbody>${(item.min===null?[0]:[0,1,2,3,4]).map(i=>`<tr><td>${item.min===null?'无涂装':E.WEARS[i]}</td><td>${item.min!==null&&!probabilities[i]?'不适用':money(item.prices[0][i]===null?null:E.cents(item.prices[0][i]))}</td><td>${!item.stattrak||item.min!==null&&!probabilities[i]?'不适用':money(item.prices[1][i]===null?null:E.cents(item.prices[1][i]))}</td><td>${item.min===null?'100.00%':pct(probabilities[i])}</td></tr>`).join('')}</tbody></table><p>磨损概率是已抽中此涂装后的条件概率，按 Float 范围和社区近似模型计算。${r?'此表为当前设置下的价格预览，上方记录保留当时的结算价。':''}</p><div class="detail-links"><a class="secondary-button" href="https://buff.163.com/market/csgo#tab=selling&page_num=1&search=${encodeURIComponent(item.en)}" target="_blank" rel="noopener noreferrer">在 BUFF 搜索 ↗</a><a class="secondary-button" href="https://steamcommunity.com/market/search?appid=730&q=${encodeURIComponent(item.en)}" target="_blank" rel="noopener noreferrer">Steam 市场 ↗</a></div></div>`);
+      <h3>${pattern?'模板价格预览':'按磨损参考价'} <span class="muted" style="font-size:10px">${pattern?'含模拟设定，请查看上方计价说明':'BUFF 聚合'} · ${dateLabel}</span></h3><table class="modal-table"><thead><tr><th>磨损</th><th>普通</th><th>StatTrak™</th><th>条件磨损概率</th></tr></thead><tbody>${(item.min===null?[0]:[0,1,2,3,4]).map(i=>`<tr><td>${item.min===null?'无涂装':E.WEARS[i]}</td><td>${item.min!==null&&!probabilities[i]?'不适用':money(item.prices[0][i]===null?null:E.cents(item.prices[0][i]))}</td><td>${!item.stattrak||item.min!==null&&!probabilities[i]?'不适用':money(item.prices[1][i]===null?null:E.cents(item.prices[1][i]))}</td><td>${item.min===null?'100.00%':pct(probabilities[i])}</td></tr>`).join('')}</tbody></table><p>磨损概率是已抽中此涂装后的条件概率，按 Float 范围和社区近似模型计算。${r?'此表为当前设置下的价格预览，上方记录保留当时的结算价。':''}</p><div class="detail-links"><a class="secondary-button" href="https://buff.163.com/market/csgo#tab=selling&page_num=1&search=${encodeURIComponent(item.en)}" target="_blank" rel="noopener noreferrer">在 BUFF 搜索 ↗</a><a class="secondary-button" href="https://steamcommunity.com/market/search?appid=730&q=${encodeURIComponent(item.en)}" target="_blank" rel="noopener noreferrer">Steam 市场 ↗</a></div></div>`);
     if ($('special-select')) $('special-select').onchange=event=>{
       skinModal(id,recordIndex,event.target.value); $('special-select').focus({preventScroll:true});
     };
@@ -383,6 +404,27 @@
       settings.patternMultipliers[`${id}:${pattern.seed}`]=Number(event.currentTarget.elements.multiplier.value);
       save();skinModal(id,recordIndex,choice);toast('模板模拟倍数已保存，下次开箱生效。');
     };
+    if ($('seed-form')) $('seed-form').onsubmit=event=>{
+      event.preventDefault();if(!event.currentTarget.reportValidity())return;
+      skinModal(id,recordIndex,`seed:${Number(event.currentTarget.elements.seed.value)}`);
+      $('seed-form').elements.seed.focus({preventScroll:true});
+    };
+    document.querySelectorAll('[data-inspect-seed]').forEach(button=>button.onclick=()=>skinModal(id,recordIndex,`seed:${button.dataset.inspectSeed}`));
+    if ($('pattern-price-form')) {
+      const form=$('pattern-price-form');
+      const priceKey=()=>`${id}:${pattern.seed}:${form.elements.st.value}:${form.elements.wear.value}`;
+      const refreshPrice=()=>{
+        const q=quoteAt(Number(form.elements.wear.value),form.elements.st.value==='1');
+        form.elements.price.value=q.value===null?'':(q.value/100).toFixed(2);
+      };
+      form.elements.wear.onchange=refreshPrice;form.elements.st.onchange=refreshPrice;refreshPrice();
+      form.onsubmit=event=>{
+        event.preventDefault();if(!form.reportValidity())return;
+        settings.patternPrices[priceKey()]=Number(form.elements.price.value);
+        save();skinModal(id,recordIndex,choice);toast('此模板、磨损与 StatTrak 的独立模拟价已保存。');
+      };
+      $('restore-pattern-price').onclick=()=>{delete settings.patternPrices[priceKey()];save();skinModal(id,recordIndex,choice);toast('已恢复该规格的默认模板计价。');};
+    }
   }
   function settingsModal() {
     if (busy||auto) return;
@@ -398,8 +440,8 @@
   }
   function exportCSV() {
     if (!records.length) return;
-    const headers=['序号','时间','武器箱','饰品','英文名','品质','StatTrak','磨损','Float','图案种子','箱价_CNY','钥匙_CNY','成本_CNY','参考价_CNY','手续费百分比','产出净值_CNY','盈亏_CNY','价格快照时间','特殊模板','相位','估价来源','模拟估价','溢价倍数'];
-    const rows=records.map(r=>{const s=D.items[r.itemId];return [r.index,r.time,caseById[r.caseId].name,s.name,s.en,E.TIERS[r.tier].name,r.stattrak?'是':'否',r.wear===null?'无涂装':E.WEARS[r.wear],r.float??'',r.seed,r.caseCost/100,r.keyCost/100,r.cost/100,r.value===null?'':r.value/100,r.feeRate,r.netValue===null?'':r.netValue/100,r.profit===null?'':r.profit/100,r.priceDate??'',r.specialLabel??'',r.variantKey??'',r.priceSource??'历史快照',r.simulation?'是':'否',r.multiplier??''];});
+    const headers=['序号','时间','武器箱','饰品','英文名','品质','StatTrak','磨损','Float','图案种子','箱价_CNY','钥匙_CNY','成本_CNY','参考价_CNY','手续费百分比','产出净值_CNY','盈亏_CNY','价格快照时间','特殊模板','相位','估价来源','模拟估价','溢价倍数','模板档位','模板类别','渐变百分比','模板依据'];
+    const rows=records.map(r=>{const s=D.items[r.itemId];return [r.index,r.time,caseById[r.caseId].name,s.name,s.en,E.TIERS[r.tier].name,r.stattrak?'是':'否',r.wear===null?'无涂装':E.WEARS[r.wear],r.float??'',r.seed,r.caseCost/100,r.keyCost/100,r.cost/100,r.value===null?'':r.value/100,r.feeRate,r.netValue===null?'':r.netValue/100,r.profit===null?'':r.profit/100,r.priceDate??'',r.specialLabel??'',r.variantKey??'',r.priceSource??'历史快照',r.simulation?'是':'否',r.multiplier??'',r.patternTier??'',r.patternCategory??'',r.fadePercentage??'',r.patternSource??''];});
     const quote=v=>'"'+String(v).replaceAll('"','""')+'"';
     const blob=new Blob(['\ufeff'+[headers,...rows].map(row=>row.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`case-lab-${new Date().toISOString().slice(0,10)}.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(`已生成 ${records.length} 条记录的 CSV 下载。`);

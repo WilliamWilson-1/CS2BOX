@@ -62,10 +62,22 @@
     const fraction = Math.max(0, Math.min(100, Number.isFinite(gemChance)?gemChance:5))/100;
     return variants.map(v=>v.gem ? (regular?fraction:1)/gems : (gems?1-fraction:1)/regular);
   }
+  function patternInfo(item, seed) {
+    if (!Number.isInteger(seed)||seed<0||seed>999) return null;
+    const pattern=item.patterns?.find(p=>p.seed===seed);
+    if (pattern) return pattern;
+    const fade=item.fade?.percentages?.[seed];
+    if (Number.isFinite(fade)) {
+      const multiplier=fade>=99.5?1.8:fade>=99?1.5:fade>=98?1.3:fade>=95?1.15:1;
+      return {seed,label:`渐变 ${fade.toFixed(2)}%`,category:'fade',fadePercentage:fade,
+        source:item.fade.source,multiplier};
+    }
+    return null;
+  }
   function quote(item, {wear=0, stattrak=false, seed, variantKey} = {}, settings = {}) {
     const base = item.prices[stattrak?1:0]?.[wear??0] ?? null;
     const variant = item.variants?.find(v=>v.key===variantKey);
-    const pattern = item.patterns?.find(p=>p.seed===seed);
+    const pattern = patternInfo(item,seed);
     let price=base, priceSource='BUFF 聚合快照', specialLabel=null, simulation=false, multiplier=null;
     if (variantKey) {
       price=variant?.prices[stattrak?1:0]?.[wear??0]??null;
@@ -76,9 +88,18 @@
       price=base===null?null:base*multiplier;
       priceSource=`模拟估价 · 同磨损 / StatTrak 基价 × ${multiplier}`;
       specialLabel=pattern.label; simulation=true;
+      const exact=settings.patternPrices?.[`${item.id}:${seed}:${stattrak?1:0}:${wear??0}`];
+      if (Number.isFinite(exact)&&exact>=0&&exact<=1e9) {
+        price=exact;multiplier=null;priceSource='用户设定 · 独立模板模拟价';
+      }
+      if (pattern.category==='fade'&&multiplier===1) {
+        priceSource='BUFF 基础报价 · 渐变无模拟溢价';simulation=false;
+      }
     }
     return {value:price===null?null:cents(price), baseValue:base===null?null:cents(base),
-      variantKey:variantKey||null, specialLabel, priceSource, simulation, multiplier};
+      variantKey:variantKey||null, specialLabel, priceSource, simulation, multiplier,
+      patternTier:pattern?.tier??null,patternCategory:pattern?.category??null,
+      fadePercentage:pattern?.fadePercentage??null,patternSource:pattern?.source??null};
   }
   function open(crate, items, settings = {}, rng = random) {
     const tier = weighted(TIERS.map(t=>t.weight), rng);
@@ -120,5 +141,5 @@
     totals.profit = totals.value - totals.cost;
     return totals;
   }
-  return {TIERS, WEARS, WEARS_EN, EDGES, WEIGHTS, random, weighted, cents, wearIndex, rollFloat, wearProbabilities, itemProbabilities, variantProbabilities, quote, open, summarize};
+  return {TIERS, WEARS, WEARS_EN, EDGES, WEIGHTS, random, weighted, cents, wearIndex, rollFloat, wearProbabilities, itemProbabilities, variantProbabilities, patternInfo, quote, open, summarize};
 });

@@ -37,7 +37,8 @@ test('template premiums match exact weapon and seed, preserving wear, StatTrak a
     assert.equal(q.value,E.cents(ak.prices[st?1:0][w]*100));
     assert.equal(q.simulation,true);assert.equal(q.multiplier,100);
   }
-  assert.equal(E.quote(kara,{seed:661}).simulation,false);
+  assert.equal(E.quote(kara,{seed:661}).patternTier,2); // Same seed has a different tier on this knife.
+  assert.equal(E.quote(ak,{seed:661}).patternTier,1);
   assert.equal(E.quote(kara,{seed:387}).simulation,true);
   assert.equal(E.quote(ak,{seed:660}).simulation,false);
   const settings={keyPrice:18,fee:2.5,patternMultipliers:{[`${ak.id}:661`]:125}};
@@ -49,6 +50,55 @@ test('template premiums match exact weapon and seed, preserving wear, StatTrak a
   assert.equal(restored.value,r.value);
   const noQuote={...ak,prices:[[null,null,null,null,null],[null,null,null,null,null]]};
   assert.equal(E.quote(noQuote,{seed:661}).value,null);
+});
+test('community pattern tables identify exact weapons, tiers and distinctive motifs',()=>{
+  const item=name=>Object.values(D.items).find(i=>i.en.replace('★ ','')===name);
+  assert.equal(E.patternInfo(item('AK-47 | Case Hardened'),661).tier,1);
+  assert.equal(E.patternInfo(item('AK-47 | Case Hardened'),592).tier,2);
+  assert.equal(E.patternInfo(item('AK-47 | Case Hardened'),555).tier,3);
+  assert.equal(E.patternInfo(item('AK-47 | Case Hardened'),770).tier,4);
+  assert.equal(E.patternInfo(item('M9 Bayonet | Case Hardened'),601).tier,1);
+  assert.equal(E.patternInfo(item('Bayonet | Marble Fade'),412).group,'1st Max');
+  assert.equal(E.patternInfo(item('M9 Bayonet | Marble Fade'),412),null);
+  assert.equal(E.patternInfo(item('Glock-18 | Moonrise'),601).group,'Center Star');
+  assert.equal(E.patternInfo(item('Specialist Gloves | Crimson Kimono'),458).tier,1);
+  assert.equal(E.patternInfo(item('Flip Knife | Crimson Web'),525).group,'Triple Web');
+  assert.equal(E.patternInfo(item('Karambit | Slaughter'),33).category,'slaughter');
+  for(const skin of Object.values(D.items)) {
+    assert.equal(new Set((skin.patterns||[]).map(p=>p.seed)).size,(skin.patterns||[]).length);
+    for(const p of skin.patterns||[]) {assert.ok(Number.isInteger(p.seed)&&p.seed>=0&&p.seed<1000);assert.match(p.source,/^https:\/\//);}
+  }
+});
+test('fade lookup is seed-specific, bounded, stable, and excludes gloves',()=>{
+  const fades=Object.values(D.items).filter(i=>i.fade);
+  assert.equal(fades.length,16);
+  for(const item of fades) {
+    assert.equal(item.fade.percentages.length,1000);
+    for(let seed=0;seed<1000;seed++) {
+      const info=E.patternInfo(item,seed), q=E.quote(item,{seed});
+      assert.ok(info.fadePercentage>=80&&info.fadePercentage<=100);
+      assert.equal(q.fadePercentage,info.fadePercentage);
+      assert.equal(q.simulation,info.fadePercentage>=95);
+    }
+    assert.equal(E.patternInfo(item,-1),null);assert.equal(E.patternInfo(item,1000),null);
+  }
+  assert.ok(Object.values(D.items).filter(i=>i.en.includes('Gloves | Fade')).every(i=>!i.fade));
+});
+test('independent pattern prices isolate seed, wear and StatTrak and retain missing prices',()=>{
+  const ak=Object.values(D.items).find(i=>i.en==='AK-47 | Case Hardened');
+  const key=`${ak.id}:661:0:2`, settings={patternPrices:{[key]:12345.67},patternMultipliers:{[`${ak.id}:661`]:120}};
+  const q=E.quote(ak,{seed:661,wear:2},settings);
+  assert.equal(q.value,1234567);assert.equal(q.simulation,true);assert.equal(q.multiplier,null);
+  assert.equal(E.quote(ak,{seed:661,wear:1},settings).value,E.cents(ak.prices[0][1]*120));
+  assert.equal(E.quote(ak,{seed:661,wear:2,stattrak:true},settings).value,E.cents(ak.prices[1][2]*120));
+  assert.equal(E.quote(ak,{seed:955,wear:2},settings).multiplier,30);
+  const snapshot=JSON.parse(JSON.stringify(q));settings.patternPrices[key]=0;
+  assert.equal(E.quote(ak,{seed:661,wear:2},settings).value,0);assert.equal(snapshot.value,1234567);
+  const missing={...ak,prices:[[null,null,null,null,null],[null,null,null,null,null]]};
+  assert.equal(E.quote(missing,{seed:661,wear:1},settings).value,null);
+  const fade=Object.values(D.items).find(i=>i.fade),seed=fade.fade.percentages.findIndex(v=>v<95);
+  const custom=E.quote(fade,{seed,wear:0},{patternPrices:{[`${fade.id}:${seed}:0:0`]:321}});
+  assert.equal(custom.value,32100);assert.equal(custom.simulation,true);
 });
 test('Doppler openings generate gemstones at the configured conditional probability',()=>{
   const item=Object.values(D.items).find(i=>i.en==='★ Karambit | Doppler');

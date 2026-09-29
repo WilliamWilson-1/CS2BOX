@@ -10,6 +10,14 @@
 - Keyboard opening still revealed immediately, with no active spinning class afterward; no JavaScript errors captured.
 - Probability and accounting regression suite: 14 passing tests.
 
+## Expanded special templates (2026-09-29)
+
+- AK Case Hardened inspection shows T1/T2/T3/T4 seed counts (7/6/51/81) and identifies #661 as T1.
+- Setting #661 ordinary Field-Tested to ¥12,345.67 changed only that price cell; the value survived reload. Restoring the specification removed the test override and restored default simulation pricing.
+- Bayonet Fade seed 0 showed 84.87%; inspecting #412 changed it to 80.00%. Percentages and the adopted community convention are disclosed in the dialog.
+- 390px inspection layout has no horizontal overflow; browser captured no JavaScript errors.
+- All 17 engine tests passed, including cross-weapon tier identity, Fire & Ice exclusions, all 16,000 Fade seed mappings, and wear/StatTrak-specific price isolation.
+
 ## Ten-box simultaneous results (2026-09-29)
 
 - Ten-box openings now bypass the reel and show all 10 result cards together, including when fast mode is enabled. Counts increased by exactly 10 per batch.
