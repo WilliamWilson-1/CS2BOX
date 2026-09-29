@@ -36,7 +36,7 @@ Windows 下双击项目根目录的 **`start-lan.cmd`**。它会自动寻找 Nod
 
 ## 数据
 
-共 23 款武器箱：梦魇、变革、千瓦、热潮、画廊、反冲、裂空、蛇噬、命悬一线、棱彩 2、光谱 2、突围大行动，以及头号特训、暗影、棱彩、地平线、伽玛、幻彩 2、幻彩 3、光谱、先锋大行动、手套、原版反恐精英武器箱。以数据源中的官方中文名称展示，共 822 款基础涂装，多普勒包含独立相位变体。不是销量排名，也不包含终端或纪念包。
+共 24 款武器箱：梦魇、变革、千瓦、热潮、画廊、反冲、裂空、蛇噬、命悬一线、棱彩 2、光谱 2、突围大行动，以及头号特训、暗影、棱彩、地平线、伽玛、幻彩 2、幻彩 3、光谱、先锋大行动、手套、原版反恐精英武器箱、英勇大行动。以数据源中的官方中文名称展示，共 837 款基础涂装，多普勒包含独立相位变体。不是销量排名，也不包含终端或纪念包。
 
 - 价格：[CSGO Trader BUFF163 聚合快照](https://prices.csgotrader.app/latest/buff163.json)，普通饰品取 `starting_at.price`；多普勒按相位取 `starting_at.doppler[phase]`，分别匹配磨损与 StatTrak，缺价不回退到普通起售价，使用[同源汇率](https://prices.csgotrader.app/latest/exchange_rates.json)换算人民币。不是 BUFF 登录接口的实时采集，不保证成交。
 - 元数据、贴图地址：[ByMykel/CSGO-API](https://github.com/ByMykel/CSGO-API)，MIT 许可。图片由 Valve Steam CDN 提供，游戏和饰品图像归各权利人所有。

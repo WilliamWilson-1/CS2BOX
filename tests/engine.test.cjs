@@ -66,9 +66,9 @@ test('Doppler openings generate gemstones at the configured conditional probabil
   }
 });
 
-test('23 complete cases, expected weapon counts, unique gold market names, valid local artwork',()=>{
-  assert.equal(D.cases.length,23);
-  const specialCounts = {'CS:GO Weapon Case':9, 'Operation Breakout Weapon Case':14, 'Shadow Case':16,
+test('24 complete cases, expected weapon counts, unique gold market names, valid local artwork',()=>{
+  assert.equal(D.cases.length,24);
+  const specialCounts = {'Operation Bravo Case':15, 'CS:GO Weapon Case':9, 'Operation Breakout Weapon Case':14, 'Shadow Case':16,
     'Chroma 2 Case':15, 'Operation Vanguard Weapon Case':14};
   for(const c of D.cases) {
     assert.equal(c.items.length,specialCounts[c.en]??17,c.en);

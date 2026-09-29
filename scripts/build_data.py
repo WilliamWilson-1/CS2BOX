@@ -27,7 +27,7 @@ NAMES = ['Dreams & Nightmares Case', 'Revolution Case', 'Kilowatt Case', 'Fever 
          'Prisma 2 Case', 'Spectrum 2 Case', 'Operation Breakout Weapon Case',
          'Danger Zone Case', 'Shadow Case', 'Prisma Case', 'Horizon Case', 'Gamma Case',
          'Chroma 2 Case', 'Chroma 3 Case', 'Spectrum Case', 'Operation Vanguard Weapon Case',
-         'Glove Case', 'CS:GO Weapon Case']
+         'Glove Case', 'CS:GO Weapon Case', 'Operation Bravo Case']
 WEARS = ['Factory New', 'Minimal Wear', 'Field-Tested', 'Well-Worn', 'Battle-Scarred']
 metadata_path = DATA / 'source-metadata.json'
 metadata = json.loads(metadata_path.read_text('utf-8')) if metadata_path.exists() else {}
