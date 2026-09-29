@@ -1,5 +1,17 @@
 # Browser verification · 2026-09-29
 
+## CS2 reel timing update
+
+- Normal roll uses the game's 6000ms duration and `cubic-bezier(0.075, 0.82, 0.165, 1)` curve.
+- Browser timing check: still rolling at 5380ms and settled at 6247ms; an automatic run stopped during its first roll completed exactly one result.
+- All 42 reel images decoded successfully before the sampled roll.
+- Resized to 390px during a roll: retained progress, settled on the recorded winner, no horizontal document overflow.
+- Resized back after stopping: pointer position stayed at 28.81% within the same winning tile and the count remained unchanged.
+- Keyboard opening still revealed immediately, with no active spinning class afterward; no JavaScript errors captured.
+- Probability and accounting regression suite: 14 passing tests.
+
+## Original checks
+
 Verified in the Codex in-app Chromium browser against http://127.0.0.1:5173.
 
 - Single opening: count increased from 0 to 1 and showed an individual result/profit.

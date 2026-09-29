@@ -8,10 +8,13 @@
   const colorClass = n => n === null || n === 0 ? 'neutral' : n > 0 ? 'gain' : 'loss';
   const pct = n => `${(n*100).toFixed(2)}%`;
   const KEY = 'caselab.session.v1';
+  // CS2 Panorama popup_capability_decodable.css: 6s, cubic-bezier(0.075, 0.82, 0.165, 1).
+  const REEL_TIMING = {duration:6000, easing:'cubic-bezier(0.075, 0.82, 0.165, 1)', fill:'forwards'};
   const defaults = {keyPrice:18, fee:0, gemChance:5, patternMultipliers:{}, casePrices:{}, fast:false, selected:D.cases[0].id};
   let settings = {...defaults}, records = [], quantity = 1, busy = false, auto = false, remaining = 0;
   let view = 'lab', contentMode = 'normal', pageSize = 100, animation = null, lastRevealed = null, toastTimer, autoTimer;
   let storageWarning = false;
+  let reelLayout = null;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const caseById = Object.fromEntries(D.cases.map(c=>[c.id,c]));
   function validRecord(r) {
@@ -75,11 +78,13 @@
       finish:record?.specialLabel?`${item.finish} · ${record.specialLabel}`:item.finish};
   }
   const specialBadge = r => r?.specialLabel ? `<span class="variant-badge ${r.simulation?'simulated':''}">${esc(r.specialLabel)}${r.simulation?' · 模拟估价':''}</span>` : '';
-  function reelCard(item) {
-    return `<div class="reel-item" style="--rarity:${E.TIERS[item.rarity].color}">${img(item,'',false)}<span>${esc(item.weapon)}</span><strong>${esc(item.finish)}</strong></div>`;
+  function reelCard(item, winner=false) {
+    return `<div class="reel-item${winner?' is-winner':''}" style="--rarity:${E.TIERS[item.rarity].color}">${img(item,'',false)}<span>${esc(item.weapon)}</span><strong>${esc(item.finish)}</strong></div>`;
   }
   function reelWidth() { return matchMedia('(max-width:600px)').matches ? 135 : 151; }
   function renderIdleReel() {
+    reelLayout=null;
+    $('reel-track').classList.remove('is-spinning','is-settled');
     const c=currentCase();
     const list=[c.items[0],c.items[8],c.items.at(-2),c.items[12%c.items.length],c.items[2],c.items[9%c.items.length],c.rare[0]];
     $('reel-track').innerHTML=list.map(id=>reelCard(D.items[id])).join('');
@@ -198,24 +203,68 @@
   }
   function renderResultReel(result) {
     const c=currentCase();
-    const ids=[c.items[1],c.items[8],result.itemId,c.items[3],c.items[12%c.items.length]];
-    $('reel-track').innerHTML=ids.map((id,i)=>reelCard(i===2?appearance(D.items[id],result):D.items[id])).join('');
-    $('reel-track').style.transform=`translateX(-${2*reelWidth()+(reelWidth()-5)/2}px)`;
+    const ids=[c.items[0],c.items[1],c.items[8],c.items[3],result.itemId,c.items[2],c.items[4],c.items[5],c.items[6]];
+    $('reel-track').innerHTML=ids.map((id,i)=>reelCard(i===4?appearance(D.items[id],result):D.items[id],i===4)).join('');
+    reelLayout={start:4,target:4,fraction:.5};
+    $('reel-track').classList.remove('is-spinning');
+    $('reel-track').classList.add('is-settled');
+    alignReel();
+  }
+  function reelFrames() {
+    const track=$('reel-track'), card=track.firstElementChild;
+    const width=card.getBoundingClientRect().width, pitch=width+parseFloat(getComputedStyle(track).gap);
+    const transform=(index,fraction)=>`translate3d(${-index*pitch-width*fraction}px,0,0)`;
+    return [{transform:transform(reelLayout.start,.5)},{transform:transform(reelLayout.target,reelLayout.fraction)}];
+  }
+  function alignReel() {
+    if(!reelLayout)return;
+    const frames=reelFrames();
+    // Retarget the same timeline when crossing a responsive breakpoint; never restart the roll.
+    if(animation)animation.effect.setKeyframes(frames);
+    else $('reel-track').style.transform=frames[reelLayout.preparing?0:1].transform;
+  }
+  async function prepareReelImages(track) {
+    let timeout;
+    try {
+      await Promise.race([
+        Promise.allSettled([...track.querySelectorAll('img')].map(image=>image.decode())),
+        new Promise(resolve=>{timeout=setTimeout(resolve,800);})
+      ]);
+    } finally { clearTimeout(timeout); }
   }
   async function spin(result, instant) {
     lastRevealed=result;
     if (instant || reducedMotion.matches) { renderResultReel(result); return; }
-    const c=currentCase(), target=27;
+    // 32 tile crossings, plus guard tiles on both ends to fill wide viewports.
+    const c=currentCase(), target=36;
     // Decorative neighbors do not determine the previously drawn result.
-    const cards=Array.from({length:33},(_,i)=>i===target?appearance(D.items[result.itemId],result):D.items[c.items[Math.floor(E.random()*c.items.length)]]);
+    const pools=E.TIERS.map((_,tier)=>tier===4?c.rare:c.items.filter(id=>D.items[id].rarity===tier));
+    const decoration=()=>{
+      const pool=pools[E.weighted(E.TIERS.map(t=>t.weight))];
+      return D.items[pool[Math.floor(E.random()*pool.length)]];
+    };
+    const cards=Array.from({length:42},(_,i)=>i===target?appearance(D.items[result.itemId],result):decoration());
     const track=$('reel-track');
-    track.innerHTML=cards.map(item=>reelCard(item)).join('');
-    const width=reelWidth(), start=-(width-5)/2, end=-(target*width+(width-5)/2)+(E.random()-.5)*36;
-    animation=track.animate([{transform:`translateX(${start}px)`},{transform:`translateX(${end}px)`}],{duration:2300,easing:'cubic-bezier(.12,.72,.12,1)',fill:'forwards'});
-    try { await animation.finished; } catch { /* A hidden tab or user motion preference can finish the reveal. */ }
-    track.style.transform=`translateX(${end}px)`;
-    animation.cancel(); animation=null;
-    if (width!==reelWidth()) renderResultReel(result);
+    track.classList.remove('is-settled');
+    track.innerHTML=cards.map((item,i)=>reelCard(item,i===target)).join('');
+    // CS2 stops between 10% and 90% of the winning tile, rather than snapping to its center.
+    reelLayout={start:4,target,fraction:.1+E.random()*.8,preparing:true};
+    track.style.transform=reelFrames()[0].transform;
+    await prepareReelImages(track);
+    if(document.hidden||reducedMotion.matches){renderResultReel(result);return;}
+    reelLayout.preparing=false;
+    track.classList.add('is-spinning');
+    const active=track.animate(reelFrames(),REEL_TIMING);
+    animation=active;
+    try { await active.finished; } catch { /* Finish or cancel still reveals the already saved result. */ }
+    finally {
+      // Set the identical final transform before removing the animation to avoid a last-frame jump.
+      track.style.transform=reelFrames()[1].transform;
+      active.cancel();
+      if(animation===active)animation=null;
+      track.classList.remove('is-spinning');
+      track.classList.add('is-settled');
+    }
   }
   async function performOpen(count=quantity, fromKeyboard=false) {
     if (busy) return;
@@ -356,7 +405,8 @@
   });
   document.addEventListener('pointerdown',()=>document.body.classList.remove('keyboard-input'));
   document.addEventListener('visibilitychange',()=>{if(document.hidden){if(auto){stopAuto();toast('已暂停连续开箱，回到页面后可继续。');}if(animation)animation.finish();}});
-  window.addEventListener('resize',()=>{if(!busy){if(lastRevealed)renderResultReel(lastRevealed);else renderIdleReel();}});
+  reducedMotion.addEventListener('change',event=>{if(event.matches&&animation)animation.finish();});
+  window.addEventListener('resize',()=>{if(reelLayout)alignReel();else if(!busy)renderIdleReel();});
   $('snapshot-date').textContent=`快照 ${dateLabel}`;
   selectCase(settings.selected);renderStats();renderRecent();
 })();
