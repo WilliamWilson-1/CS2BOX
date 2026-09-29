@@ -10,6 +10,15 @@
 - Keyboard opening still revealed immediately, with no active spinning class afterward; no JavaScript errors captured.
 - Probability and accounting regression suite: 14 passing tests.
 
+## Non-fast result dialog (2026-09-29)
+
+- Non-fast single opening automatically displays the saved item's image, rarity, wear, Float, seed, price, cost and profit. Float 0.29087341 placed the white pointer at 29.08734083%.
+- Escape closes inspection and re-enables opening. Ten-box inspection navigated from item 10/10 to 9/10 without adding records.
+- Fast opening increased the count once with no dialog.
+- Normal automatic opening completed its reel, then stayed at 43 records while inspection remained open. Continue produced exactly the next result (44); Stop in the dialog closed it and re-enabled manual opening.
+- At 390 × 844 the dialog had no horizontal overflow and its confirmation button was fully inside the visible dialog.
+- No browser JavaScript errors captured; all 14 engine regression tests passed.
+
 ## Original checks
 
 Verified in the Codex in-app Chromium browser against http://127.0.0.1:5173.

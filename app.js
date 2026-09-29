@@ -285,6 +285,7 @@
       const item=appearance(D.items[last.itemId],last), total=E.summarize(batch);
       $('result-bar').innerHTML=`<span class="result-status"><i class="quality-dot" style="--rarity:${E.TIERS[last.tier].color}"></i><span class="result-name">${last.stattrak?'ST™ ':''}${esc(item.weapon)} · ${esc(item.finish)}</span></span><span class="result-profit ${colorClass(total.unknown?null:total.profit)}">${batch.some(r=>r.simulation)?'模拟估价 · ':''}${count>1?'本轮 '+count+' 箱':'本次'} ${total.unknown?'待估值':money(total.profit,true)}</span>`;
       if (count===10) toast('10 箱已逐一结算，可在库存查看每一箱的盈亏。');
+      if (!settings.fast) await revealModal(batch);
     } catch(error) {
       console.error(error); stopAuto(); toast('开箱未完成，请查看已保存的记录后重试。');
     } finally {
@@ -302,6 +303,40 @@
     $('modal-content').innerHTML=html;
     if (!$('modal').open) $('modal').showModal();
     $('modal').scrollTop=0;
+  }
+  function wearMeter(item, record) {
+    if (item.min===null) return '<p class="muted">原版刀无磨损等级</p>';
+    return `<div class="wear-range">${Number.isFinite(record?.float)?`<span class="wear-pointer" style="left:${Math.max(0,Math.min(1,record.float))*100}%" role="img" aria-label="当前磨损 Float ${record.float.toFixed(8)}" title="Float ${record.float.toFixed(8)}"></span>`:''}</div><div class="wear-labels">${E.EDGES.map(edge=>`<span style="left:${edge*100}%">${edge.toFixed(2)}</span>`).join('')}</div>`;
+  }
+  function revealModal(batch) {
+    const dialog=$('modal');
+    let position=batch.length-1;
+    function render(focusId='reveal-accept') {
+      const r=batch[position], item=appearance(D.items[r.itemId],r), tier=E.TIERS[r.tier];
+      modal(`<section class="reveal" style="--rarity:${tier.color}" aria-labelledby="reveal-title">
+        <div class="reveal-heading"><span class="eyebrow">已获得新饰品</span><span>第 ${r.index} 箱 · ${esc(caseById[r.caseId].name)}</span></div>
+        <div class="reveal-art">${img(item,'',false)}</div>
+        <div class="reveal-name"><span class="detail-tier">${esc(tier.name)}${r.stattrak?' · StatTrak™':''}</span><h2 id="reveal-title">${esc(item.weapon)} <span>|</span> ${esc(item.finish)}</h2>${specialBadge(r)}</div>
+        <div class="reveal-wear"><div class="reveal-wear-heading"><strong>${r.float===null?'无磨损等级':E.WEARS[r.wear]}</strong><span>${r.float===null?'无涂装':`Float <b>${r.float.toFixed(8)}</b>`}</span></div>${wearMeter(item,r)}<div class="reveal-pattern"><span>图案模板 <b>#${r.seed}</b></span>${item.min===null?'':`<span>磨损范围 ${item.min.toFixed(2)} – ${item.max.toFixed(2)}</span>`}</div></div>
+        <div class="reveal-values"><div><span>${r.simulation?'模拟估价':'参考售价'}</span><strong>${money(r.value)}</strong></div><div><span>本次成本</span><strong>${money(r.cost)}</strong></div><div><span>本次盈亏</span><strong class="${colorClass(r.profit)}">${money(r.profit,true)}</strong></div></div>
+        <p class="reveal-note">${esc(r.priceSource||'历史聚合快照')} · 手续费 ${r.feeRate}%${r.simulation?' · 模拟估价不代表市场报价':''}</p>
+        ${batch.length>1?`<div class="reveal-pagination"><button class="secondary-button" id="reveal-prev" ${position===0?'disabled':''} aria-label="上一件饰品">← 上一件</button><span aria-live="polite">${position+1} / ${batch.length} 件</span><button class="secondary-button" id="reveal-next" ${position===batch.length-1?'disabled':''} aria-label="下一件饰品">下一件 →</button></div>`:''}
+        <div class="reveal-actions">${auto?'<button class="secondary-button" id="reveal-stop">停止连续开箱</button>':''}<button class="primary-button" id="reveal-accept">${auto&&remaining>batch.length?'继续开箱':'收下饰品'}</button></div>
+      </section>`);
+      $('reveal-accept').onclick=()=>dialog.close();
+      if ($('reveal-stop')) $('reveal-stop').onclick=()=>{stopAuto();dialog.close();};
+      if ($('reveal-prev')) $('reveal-prev').onclick=()=>{position--;render(position===0?'reveal-next':'reveal-prev');};
+      if ($('reveal-next')) $('reveal-next').onclick=()=>{position++;render(position===batch.length-1?'reveal-prev':'reveal-next');};
+      $(focusId).focus({preventScroll:true});
+    }
+    // Native close covers the action buttons, Escape, the close icon and backdrop.
+    // Keep the opening busy until inspection ends, so automatic runs cannot overlap it.
+    return new Promise((resolve,reject)=>{
+      const onClose=()=>resolve();
+      dialog.addEventListener('close',onClose,{once:true});
+      try { render(); }
+      catch(error) { dialog.removeEventListener('close',onClose);reject(error); }
+    });
   }
   function sourcesModal() {
     const age=priceDate?(Date.now()-priceDate.getTime())/86400000:null;
@@ -334,7 +369,7 @@
       ${variant?`<div class="notice">${esc(variant.label)} · 独立相位报价 · ${dateLabel}<br>抽中此多普勒后，相位占比 ${pct(variantOdds[variants.indexOf(variant)])}（模拟设定，可在模拟设置中调整宝石总占比）。缺失报价保留为空。</div>`:''}
       ${pattern?`<div class="notice simulation-notice"><strong>模拟估价 · ${esc(pattern.label)}</strong><br>同磨损 / StatTrak 普通淬火基价 × ${multiplier}。默认 100 倍仅为游戏模拟设定，不是该模板的市场报价。<br>命中种子 #${pattern.seed} 才生效，抽中此涂装后模板概率 0.10%。贴图为通用涂装预览，不复现该种子的纹路。<br><a href="${esc(pattern.source)}" target="_blank" rel="noopener noreferrer">模板识别依据 ↗</a>（该来源不提供本模拟倍数）</div>${!r?`<form id="pattern-form" class="pattern-form"><label>模拟溢价倍数<input aria-label="模拟溢价倍数" name="multiplier" type="number" min="1" max="10000" step="0.1" required value="${multiplier}"></label><button class="secondary-button" type="submit">保存倍数</button><small>只影响后续开箱，历史记录保留原估值。</small></form>`:''}`:''}
       <p>当前箱中基础掉落概率 <strong>${pct(chance)}</strong>（含普通与 StatTrak™ 合计）${item.stattrak?' · 其中 StatTrak™ 占 10%':''}。${item.rarity===4?'金色池内部采用型号 / 涂装均分假设。':''}</p>
-      ${item.min===null?'<p>原版刀无磨损等级，所有报价均指同一件原版物品。</p>':`<h3>磨损范围 ${item.min.toFixed(2)} – ${item.max.toFixed(2)}</h3><div class="wear-range">${Number.isFinite(r?.float)?`<span class="wear-pointer" style="left:${Math.max(0,Math.min(1,r.float))*100}%" role="img" aria-label="当前磨损 Float ${r.float.toFixed(8)}" title="Float ${r.float.toFixed(8)}"></span>`:''}</div><div class="wear-labels">${E.EDGES.map(edge=>`<span style="left:${edge*100}%">${edge.toFixed(2)}</span>`).join('')}</div>`}
+      ${item.min===null?'<p>原版刀无磨损等级，所有报价均指同一件原版物品。</p>':`<h3>磨损范围 ${item.min.toFixed(2)} – ${item.max.toFixed(2)}</h3>${wearMeter(item,r)}`}
       <h3>${pattern?'按磨损模拟估价':'按磨损参考价'} <span class="muted" style="font-size:10px">${pattern?'模拟倍数 × BUFF 基价':'BUFF 聚合'} · ${dateLabel}</span></h3><table class="modal-table"><thead><tr><th>磨损</th><th>普通</th><th>StatTrak™</th><th>条件磨损概率</th></tr></thead><tbody>${(item.min===null?[0]:[0,1,2,3,4]).map(i=>`<tr><td>${item.min===null?'无涂装':E.WEARS[i]}</td><td>${item.min!==null&&!probabilities[i]?'不适用':money(item.prices[0][i]===null?null:E.cents(item.prices[0][i]))}</td><td>${!item.stattrak||item.min!==null&&!probabilities[i]?'不适用':money(item.prices[1][i]===null?null:E.cents(item.prices[1][i]))}</td><td>${item.min===null?'100.00%':pct(probabilities[i])}</td></tr>`).join('')}</tbody></table><p>磨损概率是已抽中此涂装后的条件概率，按 Float 范围和社区近似模型计算。${r?'此表为当前设置下的价格预览，上方记录保留当时的结算价。':''}</p><div class="detail-links"><a class="secondary-button" href="https://buff.163.com/market/csgo#tab=selling&page_num=1&search=${encodeURIComponent(item.en)}" target="_blank" rel="noopener noreferrer">在 BUFF 搜索 ↗</a><a class="secondary-button" href="https://steamcommunity.com/market/search?appid=730&q=${encodeURIComponent(item.en)}" target="_blank" rel="noopener noreferrer">Steam 市场 ↗</a></div></div>`);
     if ($('special-select')) $('special-select').onchange=event=>{
       skinModal(id,recordIndex,event.target.value); $('special-select').focus({preventScroll:true});
