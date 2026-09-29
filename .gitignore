@@ -11,3 +11,4 @@ screenshots/
 .deployment/
 .env
 .env.*
+.idea/

@@ -30,3 +30,6 @@ dialog{width:min(680px,calc(100% - 32px));max-height:88vh;margin:auto;border:1px
 .pattern-form{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:12px 0 20px}
 .pattern-form label{display:grid;gap:7px;flex:1;min-width:130px}.pattern-form small{width:100%;font-size:10px;color:#99939f}
 .pattern-form button{min-height:41px}
+footer{flex-wrap:wrap}
+.footer-credits{flex:0 0 100%;display:flex;justify-content:center;flex-wrap:wrap;gap:6px 24px;margin:0;padding-top:2px;color:#858792;font-size:10px;line-height:1.7}
+.footer-credits strong{font-weight:500;color:#b5b6bf}

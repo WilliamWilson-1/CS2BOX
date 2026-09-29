@@ -256,7 +256,7 @@
   }
   function sourcesModal() {
     const age=priceDate?(Date.now()-priceDate.getTime())/86400000:null;
-    modal(`<h2 class="modal-title">数据有来源，概率有边界。</h2><p class="modal-subtitle">${D.cases.length} 款常见武器箱 · ${Object.keys(D.items).length} 款去重饰品 · 本地快照</p><div class="modal-body">
+    modal(`<h2 class="modal-title">真实概率，真实人品</h2><p class="modal-subtitle">${D.cases.length} 款常见武器箱 · ${Object.keys(D.items).length} 款去重饰品 · 本地快照</p><div class="modal-body">
       <h3>价格与贴图</h3><div class="source-line"><strong>BUFF163 最低在售价 · 经 CSGO Trader 聚合</strong><small>上游文件更新：${esc(timeLabel)}<br>下载时间：${esc(new Date(D.meta.builtAt).toLocaleString('zh-CN'))}<br>这是聚合快照，不是 BUFF 实时成交价。上游文件时间不保证每件商品同一时刻更新。</small><p><a href="${D.meta.sources.buff}" target="_blank" rel="noopener noreferrer">价格原始 JSON ↗</a> · <a href="https://csgotrader.app/prices/" target="_blank" rel="noopener noreferrer">数据提供方 ↗</a></p></div>
       <div class="source-line"><strong>人民币换算 / 箱价与钥匙分开计费</strong><small>聚合源美元价 × ${D.meta.usdCny.toFixed(6)} CNY/USD，按分四舍五入。汇率来自同一提供方。默认钥匙 ¥18.00 为可调整的模拟设定，不冒充实时国服售价。</small><p><a href="${D.meta.sources.rates}" target="_blank" rel="noopener noreferrer">汇率原始 JSON ↗</a></p></div>
       <div class="source-line"><strong>名称、内容池、Float 范围及原始贴图</strong><small>ByMykel / CSGO-API 公开游戏数据，贴图来源 Valve Steam CDN。贴图是涂装预览，不会随模拟 Float 或图案种子动态变化。</small><p><a href="https://github.com/ByMykel/CSGO-API" target="_blank" rel="noopener noreferrer">CSGO-API ↗</a></p></div>
