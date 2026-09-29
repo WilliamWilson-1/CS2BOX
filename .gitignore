@@ -1,0 +1,13 @@
+node_modules/
+data/*_en.json
+data/*_zh.json
+data/buff.json
+data/rates.json
+data/*.headers
+data/*.tmp
+*.log
+dist/
+screenshots/
+.deployment/
+.env
+.env.*

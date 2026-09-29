@@ -1,0 +1,12 @@
+{
+  "name": "cs2-case-lab",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-site.cjs",
+    "start": "node scripts/serve.cjs",
+    "start:lan": "node scripts/serve.cjs --lan",
+    "test": "node --test tests/*.test.cjs",
+    "data:refresh": "python scripts/build_data.py --refresh --images"
+  }
+}

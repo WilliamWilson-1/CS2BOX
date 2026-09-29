@@ -1,0 +1,32 @@
+{
+  "rates": {
+    "url": "https://prices.csgotrader.app/latest/exchange_rates.json",
+    "fetchedAt": "2026-09-29T10:10:51.028630+00:00",
+    "lastModified": "Tue, 29 Sep 2026 08:05:02 GMT"
+  },
+  "crates_en": {
+    "url": "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/crates.json",
+    "fetchedAt": "2026-09-29T10:10:52.473868+00:00",
+    "lastModified": null
+  },
+  "skins_zh": {
+    "url": "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/zh-CN/skins.json",
+    "fetchedAt": "2026-09-29T10:10:53.255552+00:00",
+    "lastModified": null
+  },
+  "skins_en": {
+    "url": "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins.json",
+    "fetchedAt": "2026-09-29T10:10:53.330057+00:00",
+    "lastModified": null
+  },
+  "buff": {
+    "url": "https://prices.csgotrader.app/latest/buff163.json",
+    "fetchedAt": "2026-09-29T10:10:53.621007+00:00",
+    "lastModified": "Tue, 29 Sep 2026 05:11:30 GMT"
+  },
+  "crates_zh": {
+    "url": "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/zh-CN/crates.json",
+    "fetchedAt": "2026-09-29T10:10:53.714881+00:00",
+    "lastModified": null
+  }
+}
