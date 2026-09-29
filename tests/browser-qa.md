@@ -10,6 +10,13 @@
 - Keyboard opening still revealed immediately, with no active spinning class afterward; no JavaScript errors captured.
 - Probability and accounting regression suite: 14 passing tests.
 
+## Ten-box simultaneous results (2026-09-29)
+
+- Ten-box openings now bypass the reel and show all 10 result cards together, including when fast mode is enabled. Counts increased by exactly 10 per batch.
+- Each card has its own saved wear, Float pointer, pattern, quote and profit. All 10 artwork images loaded.
+- The dialog shows total batch cost/profit and a single collect-all button. The 390px layout has no horizontal overflow.
+- This supersedes the paginated ten-box inspection check below; non-fast single openings retain their inspection dialog.
+
 ## Non-fast result dialog (2026-09-29)
 
 - Non-fast single opening automatically displays the saved item's image, rarity, wear, Float, seed, price, cost and profit. Float 0.29087341 placed the white pointer at 29.08734083%.

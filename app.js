@@ -279,13 +279,12 @@
       save();
       const last=batch.at(-1);
       $('result-bar').innerHTML=`<span class="result-status"><span class="tiny-dot"></span> 正在揭晓${count>1?` ${count} 箱`:''}…</span><span class="muted">独立随机 · 无保底机制</span>`;
-      await spin(last,settings.fast||fromKeyboard);
+      await spin(last,count>1||settings.fast||fromKeyboard);
       renderStats(); renderRecent();
       if (view==='inventory') renderInventory();
       const item=appearance(D.items[last.itemId],last), total=E.summarize(batch);
       $('result-bar').innerHTML=`<span class="result-status"><i class="quality-dot" style="--rarity:${E.TIERS[last.tier].color}"></i><span class="result-name">${last.stattrak?'ST™ ':''}${esc(item.weapon)} · ${esc(item.finish)}</span></span><span class="result-profit ${colorClass(total.unknown?null:total.profit)}">${batch.some(r=>r.simulation)?'模拟估价 · ':''}${count>1?'本轮 '+count+' 箱':'本次'} ${total.unknown?'待估值':money(total.profit,true)}</span>`;
-      if (count===10) toast('10 箱已逐一结算，可在库存查看每一箱的盈亏。');
-      if (!settings.fast) await revealModal(batch);
+      if (count>1||!settings.fast) await revealModal(batch);
     } catch(error) {
       console.error(error); stopAuto(); toast('开箱未完成，请查看已保存的记录后重试。');
     } finally {
@@ -310,9 +309,16 @@
   }
   function revealModal(batch) {
     const dialog=$('modal');
-    let position=batch.length-1;
-    function render(focusId='reveal-accept') {
-      const r=batch[position], item=appearance(D.items[r.itemId],r), tier=E.TIERS[r.tier];
+    function render() {
+      if (batch.length>1) {
+        const total=E.summarize(batch);
+        modal(`<section class="batch-reveal" aria-labelledby="batch-reveal-title"><div class="batch-reveal-heading"><div><span class="eyebrow">一次揭晓 · ${batch.length} 件饰品</span><h2 id="batch-reveal-title">十连开箱结果</h2></div><div class="batch-reveal-total"><span>本轮盈亏</span><strong class="${colorClass(total.unknown?null:total.profit)}">${total.unknown?'待估值':money(total.profit,true)}</strong><small>总成本 ${money(batch.reduce((sum,r)=>sum+r.cost,0))}</small></div></div>
+          <div class="batch-reveal-grid">${batch.map(r=>{
+            const item=appearance(D.items[r.itemId],r),tier=E.TIERS[r.tier];
+            return `<article class="batch-result" style="--rarity:${tier.color}" aria-label="第 ${r.index} 箱 ${esc(item.weapon)} ${esc(item.finish)}"><div class="batch-result-top"><span class="detail-tier">${esc(tier.name)}${r.stattrak?' · ST™':''}</span><span>#${r.index}</span></div><div class="batch-result-art">${img(item,'',false)}</div><h3><span>${esc(item.weapon)}</span>${esc(item.finish)}</h3>${specialBadge(r)}<div class="batch-result-wear"><strong>${r.float===null?'无磨损等级':E.WEARS[r.wear]}</strong><span>${r.float===null?'无涂装':r.float.toFixed(8)}</span></div>${wearMeter(item,r)}<p class="batch-result-seed">图案 #${r.seed}</p><div class="batch-result-value"><span>${r.simulation?'模拟估价':'参考价'}</span><strong>${money(r.value)}</strong></div><div class="batch-result-value"><span>盈亏</span><strong class="${colorClass(r.profit)}">${money(r.profit,true)}</strong></div></article>`;
+          }).join('')}</div><div class="reveal-actions"><span class="batch-reveal-note">已保存至库存 · 参考价不等于成交价</span><button class="primary-button" id="reveal-accept">全部收下</button></div></section>`);
+      } else {
+      const r=batch[0], item=appearance(D.items[r.itemId],r), tier=E.TIERS[r.tier];
       modal(`<section class="reveal" style="--rarity:${tier.color}" aria-labelledby="reveal-title">
         <div class="reveal-heading"><span class="eyebrow">已获得新饰品</span><span>第 ${r.index} 箱 · ${esc(caseById[r.caseId].name)}</span></div>
         <div class="reveal-art">${img(item,'',false)}</div>
@@ -320,14 +326,12 @@
         <div class="reveal-wear"><div class="reveal-wear-heading"><strong>${r.float===null?'无磨损等级':E.WEARS[r.wear]}</strong><span>${r.float===null?'无涂装':`Float <b>${r.float.toFixed(8)}</b>`}</span></div>${wearMeter(item,r)}<div class="reveal-pattern"><span>图案模板 <b>#${r.seed}</b></span>${item.min===null?'':`<span>磨损范围 ${item.min.toFixed(2)} – ${item.max.toFixed(2)}</span>`}</div></div>
         <div class="reveal-values"><div><span>${r.simulation?'模拟估价':'参考售价'}</span><strong>${money(r.value)}</strong></div><div><span>本次成本</span><strong>${money(r.cost)}</strong></div><div><span>本次盈亏</span><strong class="${colorClass(r.profit)}">${money(r.profit,true)}</strong></div></div>
         <p class="reveal-note">${esc(r.priceSource||'历史聚合快照')} · 手续费 ${r.feeRate}%${r.simulation?' · 模拟估价不代表市场报价':''}</p>
-        ${batch.length>1?`<div class="reveal-pagination"><button class="secondary-button" id="reveal-prev" ${position===0?'disabled':''} aria-label="上一件饰品">← 上一件</button><span aria-live="polite">${position+1} / ${batch.length} 件</span><button class="secondary-button" id="reveal-next" ${position===batch.length-1?'disabled':''} aria-label="下一件饰品">下一件 →</button></div>`:''}
         <div class="reveal-actions">${auto?'<button class="secondary-button" id="reveal-stop">停止连续开箱</button>':''}<button class="primary-button" id="reveal-accept">${auto&&remaining>batch.length?'继续开箱':'收下饰品'}</button></div>
       </section>`);
+      }
       $('reveal-accept').onclick=()=>dialog.close();
       if ($('reveal-stop')) $('reveal-stop').onclick=()=>{stopAuto();dialog.close();};
-      if ($('reveal-prev')) $('reveal-prev').onclick=()=>{position--;render(position===0?'reveal-next':'reveal-prev');};
-      if ($('reveal-next')) $('reveal-next').onclick=()=>{position++;render(position===batch.length-1?'reveal-prev':'reveal-next');};
-      $(focusId).focus({preventScroll:true});
+      $('reveal-accept').focus({preventScroll:true});
     }
     // Native close covers the action buttons, Escape, the close icon and backdrop.
     // Keep the opening busy until inspection ends, so automatic runs cannot overlap it.
