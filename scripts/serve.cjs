@@ -14,7 +14,7 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 }
 const host = lan ? '0.0.0.0' : '127.0.0.1';
 let retries = 0;
-const publicFiles = new Set(['/index.html', '/styles.css', '/app.js', '/engine.js', '/data/catalog.js']);
+const publicFiles = new Set(['/index.html', '/styles.css', '/app.js', '/engine.js', '/i18n.js', '/data/catalog.js']);
 const server = http.createServer((req, res) => {
   if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405, {'Allow':'GET, HEAD'}).end(); return; }
   let pathname;

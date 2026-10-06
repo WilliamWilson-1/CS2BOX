@@ -8,9 +8,9 @@ const output = path.join(root, 'dist');
 const context = {window:{}};
 vm.runInNewContext(fs.readFileSync(path.join(root, 'data/catalog.js'), 'utf8'), context);
 const data = context.window.CS2_DATA;
-const files = new Set(['index.html', 'styles.css', 'app.js', 'engine.js',
+const files = new Set(['index.html', 'styles.css', 'app.js', 'engine.js', 'i18n.js',
   'data/catalog.js', 'data/CSGO-API-LICENSE.txt', 'data/FADE-LICENSE.txt', 'assets/favicon.svg']);
-for (const item of [...data.cases, ...Object.values(data.items)]) {
+for (const item of [...data.cases, ...(data.terminals || []), ...Object.values(data.items)]) {
   for (const asset of [item, ...(item.variants || [])]) {
     if (!/^assets\/[a-zA-Z0-9_-]+\.png$/.test(asset.image)) throw new Error('Invalid asset path');
     files.add(asset.image);

@@ -7,6 +7,28 @@ const E = require('../engine.js');
 const context = {window:{}};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../data/catalog.js'),'utf8'), context);
 const D = context.window.CS2_DATA;
+
+test('terminal collections and offers stay separate from cases and use simulated quote bounds',()=>{
+  assert.equal(D.terminals.length,2);
+  const genesis=D.terminals.find(t=>t.en==='Sealed Genesis Terminal');
+  const deadHand=D.terminals.find(t=>t.en==='Sealed Dead Hand Terminal');
+  assert.equal(genesis.items.length,17);assert.equal(genesis.rare.length,0);
+  assert.equal(deadHand.items.length,17);assert.equal(deadHand.rare.length,22);
+  for(const terminal of D.terminals) {
+    assert.ok(terminal.price>0);
+    assert.ok(fs.existsSync(path.join(__dirname,'..',terminal.image)));
+    const allowed=new Set([...terminal.items,...terminal.rare]);
+    const rng=seeded(terminal.id==='crate-5176'?101:202);
+    for(let i=0;i<2000;i++) {
+      const offer=E.terminalOffer(terminal,D.items,{},rng);
+      assert.ok(allowed.has(offer.itemId));
+      if(terminal===genesis)assert.notEqual(offer.tier,4);
+      assert.equal(offer.caseId,terminal.id);
+      assert.equal(offer.terminal,true);
+      if(offer.value!==null)assert.ok(offer.offerPrice>=Math.floor(offer.value*.9)&&offer.offerPrice<=Math.ceil(offer.value*1.25));
+    }
+  }
+});
 function seeded(seed=92743) { return () => { seed=(Math.imul(1664525,seed)+1013904223)>>>0;return seed/4294967296; }; }
 function sequence(...values) { let n=0;return ()=>values[n++]??.5; }
 

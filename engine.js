@@ -128,6 +128,23 @@
       caseCost:cents(casePrice), keyCost:cents(settings.keyPrice??18),
       profit:netValue === null ? null : netValue-cost, time:new Date().toISOString()};
   }
+  function terminalOffer(terminal, items, settings = {}, rng = random) {
+    const pools=TIERS.map((_,tier)=>tier===4?terminal.rare:terminal.items.filter(id=>items[id].rarity===tier));
+    const tier=weighted(TIERS.map((entry,i)=>pools[i].length?entry.weight:0),rng);
+    const pool=pools[tier], item=items[pick(pool,rng)];
+    const stattrak=item.stattrak&&rng()<.1;
+    const float=rollFloat(item,rng), wear=wearIndex(float), seed=Math.floor(rng()*1000);
+    const variantKey=item.variants?.length?item.variants[weighted(variantProbabilities(item,settings.gemChance),rng)].key:null;
+    const valuation=quote(item,{wear,stattrak,seed,variantKey},settings);
+    // The dealer's real pricing algorithm is not public. This quote is a
+    // deliberately labeled simulation around the same market snapshot.
+    const factor = .9 + rng()*.35;
+    const reference = valuation.value;
+    const offerPrice = reference === null ? null : Math.max(1, Math.round(reference*factor));
+    return {itemId:item.id,caseId:terminal.id,tier,stattrak,float,wear,seed,variantKey,
+      ...valuation,offerPrice,offerFactor:factor,terminal:true,
+      offerSource:'模拟报价 · 参考快照 × 0.90–1.25',time:new Date().toISOString()};
+  }
   function summarize(records) {
     const totals = {count:records.length, cost:0, value:0, profit:0, unknown:0, wins:0, stattrak:0, tiers:[0,0,0,0,0], wears:[0,0,0,0,0]};
     for (const r of records) {
@@ -141,5 +158,5 @@
     totals.profit = totals.value - totals.cost;
     return totals;
   }
-  return {TIERS, WEARS, WEARS_EN, EDGES, WEIGHTS, random, weighted, cents, wearIndex, rollFloat, wearProbabilities, itemProbabilities, variantProbabilities, patternInfo, quote, open, summarize};
+  return {TIERS, WEARS, WEARS_EN, EDGES, WEIGHTS, random, weighted, cents, wearIndex, rollFloat, wearProbabilities, itemProbabilities, variantProbabilities, patternInfo, quote, open, terminalOffer, summarize};
 });

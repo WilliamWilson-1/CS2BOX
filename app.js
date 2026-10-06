@@ -10,13 +10,14 @@
   const KEY = 'caselab.session.v1';
   // CS2 Panorama popup_capability_decodable.css: 6s, cubic-bezier(0.075, 0.82, 0.165, 1).
   const REEL_TIMING = {duration:6000, easing:'cubic-bezier(0.075, 0.82, 0.165, 1)', fill:'forwards'};
-  const defaults = {keyPrice:18, fee:0, gemChance:5, patternMultipliers:{}, patternPrices:{}, casePrices:{}, fast:false, selected:D.cases[0].id};
-  let settings = {...defaults}, records = [], quantity = 1, busy = false, auto = false, remaining = 0;
+  const defaults = {keyPrice:18, fee:0, gemChance:5, patternMultipliers:{}, patternPrices:{}, casePrices:{}, fast:false, selected:D.cases[0].id, selectedTerminal:D.terminals[0].id};
+  let settings = {...defaults}, records = [], terminalRuns = [], quantity = 1, busy = false, auto = false, remaining = 0;
   let view = 'lab', contentMode = 'normal', pageSize = 100, animation = null, lastRevealed = null, toastTimer, autoTimer;
   let storageWarning = false;
   let reelLayout = null;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  const caseById = Object.fromEntries(D.cases.map(c=>[c.id,c]));
+  const caseById = Object.fromEntries([...D.cases,...D.terminals].map(c=>[c.id,c]));
+  const terminalById = Object.fromEntries(D.terminals.map(c=>[c.id,c]));
   function validRecord(r) {
     return r && D.items[r.itemId] && caseById[r.caseId] && Number.isInteger(r.tier) && r.tier>=0 && r.tier<5 &&
       Number.isSafeInteger(r.cost) && r.cost>=0 && (r.netValue===null || Number.isSafeInteger(r.netValue) && r.netValue>=0) &&
@@ -24,14 +25,25 @@
       (r.wear===null || Number.isInteger(r.wear) && r.wear>=0 && r.wear<5) &&
       (r.float===null || Number.isFinite(r.float) && r.float>=0 && r.float<=1) && typeof r.time==='string' && Number.isFinite(Date.parse(r.time));
   }
+  function validTerminalRun(r) {
+    if(!r||!terminalById[r.terminalId]||!Number.isSafeInteger(r.cost)||r.cost<0||!['active','passed','bought'].includes(r.status)||!Number.isInteger(r.step)||r.step<1||r.step>5||typeof r.time!=='string'||!Number.isFinite(Date.parse(r.time)))return false;
+    if(r.status==='active') {
+      const terminal=terminalById[r.terminalId],offer=r.offer;
+      return !!offer&&[...terminal.items,...terminal.rare].includes(offer.itemId)&&Number.isInteger(offer.tier)&&offer.tier>=0&&offer.tier<5&&(offer.offerPrice===null||Number.isSafeInteger(offer.offerPrice)&&offer.offerPrice>=0);
+    }
+    return true;
+  }
   try {
     const saved = JSON.parse(localStorage.getItem(KEY));
     if (saved?.version === 1) {
       records = Array.isArray(saved.records) ? saved.records.filter(validRecord).map((r,i)=>({...r,index:i+1,profit:r.netValue===null?null:r.netValue-r.cost})) : [];
+      terminalRuns = Array.isArray(saved.terminalRuns) ? saved.terminalRuns.filter(validTerminalRun) : [];
       const s = saved.settings || {};
       if (Number.isFinite(s.keyPrice) && s.keyPrice>=0 && s.keyPrice<=100000) settings.keyPrice=s.keyPrice;
       if (Number.isFinite(s.fee) && s.fee>=0 && s.fee<=100) settings.fee=s.fee;
       if (caseById[s.selected]) settings.selected=s.selected;
+      if (!D.cases.some(c=>c.id===settings.selected)) settings.selected=D.cases[0].id;
+      if (terminalById[s.selectedTerminal]) settings.selectedTerminal=s.selectedTerminal;
       settings.fast=!!s.fast;
       if (Number.isFinite(s.gemChance) && s.gemChance>=0 && s.gemChance<=100) settings.gemChance=s.gemChance;
       settings.patternMultipliers=Object.fromEntries(Object.entries(s.patternMultipliers||{}).filter(([key,v])=>{const [id,seed]=key.split(':');return Number.isFinite(v)&&v>=1&&v<=10000&&D.items[id]&&E.patternInfo(D.items[id],Number(seed));}));
@@ -44,13 +56,13 @@
   const currentCost = () => E.cents(currentPrice()) + E.cents(settings.keyPrice);
   const priceDate = D.meta.priceModified ? new Date(D.meta.priceModified) : null;
   const dateLabel = priceDate ? priceDate.toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}).replaceAll('/','.') : '上游时间未知';
-  const timeLabel = priceDate ? priceDate.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) + '（北京时间）' : '上游未提供更新时间';
+  const timeLabel = priceDate ? priceDate.toLocaleString(window.LabI18n.lang==='en'?'en-GB':'zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) + (window.LabI18n.lang==='en'?' (China Standard Time)':'（北京时间）') : window.LabI18n.lang==='en'?'No upstream update time':'上游未提供更新时间';
   function toast(message) {
     clearTimeout(toastTimer); $('toast').textContent=message; $('toast').classList.add('visible');
     toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3200);
   }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({version:1,settings,records})); }
+    try { localStorage.setItem(KEY, JSON.stringify({version:1,settings,records,terminalRuns})); }
     catch {
       if (!storageWarning) { toast('本地存储已满或不可用，请导出记录；当前会话可继续。'); storageWarning=true; }
       document.querySelector('.live-badge').textContent='仅当前会话';
@@ -69,7 +81,7 @@
     const normalize = text => text.toLowerCase().replace(/[\s“”"']/g,'').replaceAll('伽马','伽玛');
     const query=normalize($('case-search').value.trim());
     const filtered=D.cases.filter(c=>normalize(c.name+' '+c.en).includes(query));
-    $('case-count').textContent=`${filtered.length} 款`;
+    $('case-count').textContent=window.LabI18n.lang==='en'?`${filtered.length} cases`:`${filtered.length} 款`;
     $('case-rail').innerHTML=filtered.length ? filtered.map(c=>`<button class="case-card ${c.id===settings.selected?'selected':''}" data-case="${c.id}" aria-pressed="${c.id===settings.selected}" ${busy||auto?'disabled':''}>
       ${c.id===settings.selected?'<span class="selected-check">✓</span>':''}${img(c,'',false)}<span class="case-title">${esc(c.name)}</span><span class="case-bottom"><strong>${money(E.cents(settings.casePrices[c.id]??c.price))}</strong><span>${c.rare.some(id=>D.items[id].model.includes('glove') || D.items[id].model.includes('handwrap'))?'GLOVES':'KNIVES'}</span></span></button>`).join('') : '<div class="empty-recent">没有匹配的武器箱，试试「梦魇」或「千瓦」。</div>';
   }
@@ -147,26 +159,30 @@
   }
   function renderStats() {
     const s=E.summarize(records);
+    const abandoned=terminalRuns.filter(r=>r.status!=='bought');
+    const abandonedCost=abandoned.reduce((sum,r)=>sum+r.cost,0);
+    s.cost+=abandonedCost;s.profit-=abandonedCost;s.count+=abandoned.length;
     $('total-profit').textContent=money(s.profit,true);
     $('total-profit').className='big-profit '+colorClass(s.profit);
     $('profit-label').textContent=s.unknown?'已知估值下界':'累计盈亏';
-    $('profit-caption').textContent=s.unknown?`${s.unknown} 件暂无报价，完整盈亏待定` : s.count?`${s.wins} 箱盈利 / ${s.count} 箱 · 已扣除钥匙与设定手续费`:'从第一箱开始，记录每一份运气。';
+    $('profit-caption').textContent=s.unknown?`${s.unknown} 件暂无报价，完整盈亏待定` : s.count?`${s.wins} 次盈利 / ${s.count} 次尝试${terminalRuns.length?' · 含终端机消耗':''}`:'从第一箱开始，记录每一份运气。';
     $('total-cost').textContent=money(s.cost);
     $('total-value').textContent=money(s.value);
-    $('total-count').innerHTML=`${s.count.toLocaleString()} <small>箱</small>`;
+    $('total-count').innerHTML=`${s.count.toLocaleString()} <small>次</small>`;
     $('roi').textContent=s.unknown?'待估值':s.cost?`${s.profit>0?'+':''}${(s.profit/s.cost*100).toFixed(1)}%`:'—';
     $('roi').className=s.cost&&!s.unknown?colorClass(s.profit):'';
     $('stattrak-count').textContent=`StatTrak™ ${s.stattrak}`;
-    $('nav-count').textContent=s.count.toLocaleString();
-    $('chart-end').textContent=`${s.count.toLocaleString()} 次开箱`;
-    $('quality-bar').innerHTML=E.TIERS.map((t,i)=>`<span style="width:${s.count?s.tiers[i]/s.count*100:[62,18,10,6,4][i]}%;background:${t.color};opacity:${s.count?1:.4};${s.count&&!s.tiers[i]?'display:none':''}"></span>`).join('');
-    $('quality-list').innerHTML=E.TIERS.map((t,i)=>`<div class="quality-row"><span><i class="quality-dot" style="--rarity:${t.color}"></i>${t.name}</span><span><small>${s.count?pct(s.tiers[i]/s.count):'—'}</small><strong>${s.tiers[i]}</strong></span></div>`).join('');
+    $('nav-count').textContent=records.length.toLocaleString();
+    $('chart-end').textContent=`${s.count.toLocaleString()} 次尝试`;
+    $('quality-bar').innerHTML=E.TIERS.map((t,i)=>`<span style="width:${records.length?s.tiers[i]/records.length*100:[62,18,10,6,4][i]}%;background:${t.color};opacity:${records.length?1:.4};${records.length&&!s.tiers[i]?'display:none':''}"></span>`).join('');
+    $('quality-list').innerHTML=E.TIERS.map((t,i)=>`<div class="quality-row"><span><i class="quality-dot" style="--rarity:${t.color}"></i>${t.name}</span><span><small>${records.length?pct(s.tiers[i]/records.length):'—'}</small><strong>${s.tiers[i]}</strong></span></div>`).join('');
     if(records.some(r=>r.simulation)) $('profit-caption').textContent+=' · 含模板模拟估价';
     renderChart(s);
   }
   function renderChart(summary) {
     const values=[0]; let total=0;
-    for (const r of records) { total+=(r.netValue??0)-r.cost; values.push(total); }
+    const events=[...records.map(r=>({time:r.time,delta:(r.netValue??0)-(r.terminal?r.offerCost:r.cost)})),...terminalRuns.map(r=>({time:r.time,delta:-r.cost}))].sort((a,b)=>a.time.localeCompare(b.time));
+    for (const event of events) { total+=event.delta; values.push(total); }
     const min=Math.min(0,...values.filter((_,i)=>i%Math.max(1,Math.floor(values.length/200))===0),total);
     const max=Math.max(0,...values.filter((_,i)=>i%Math.max(1,Math.floor(values.length/200))===0),total);
     const range=max-min||1;
@@ -175,15 +191,75 @@
     const points=values.flatMap((v,i)=>i%stride===0||i===values.length-1?[[i/(values.length-1||1)*300,y(v)]]:[]);
     const line=points.map((p,i)=>`${i?'L':'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
     const color=summary.profit<0?'#d87c73':summary.profit>0?'#78b799':'#65616a';
-    $('profit-chart').innerHTML=`<defs><linearGradient id="chart-fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${color}" stop-opacity=".16"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><path d="M0 ${records.length?y(0):42}H300" stroke="#3c3b42" stroke-width="1" stroke-dasharray="3 5"/>${records.length?`<path d="${line}L300,85L0,85Z" fill="url(#chart-fill)"/><path d="${line}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke"/><circle cx="300" cy="${y(total)}" r="2.8" fill="${color}"/>`:''}`;
-    $('profit-chart').setAttribute('aria-label',`累计盈亏走势，${records.length} 次开箱，${summary.unknown?'已知估值下界':'累计盈亏'} ${money(total)}`);
+    $('profit-chart').innerHTML=`<defs><linearGradient id="chart-fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${color}" stop-opacity=".16"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><path d="M0 ${events.length?y(0):42}H300" stroke="#3c3b42" stroke-width="1" stroke-dasharray="3 5"/>${events.length?`<path d="${line}L300,85L0,85Z" fill="url(#chart-fill)"/><path d="${line}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke"/><circle cx="300" cy="${y(total)}" r="2.8" fill="${color}"/>`:''}`;
+    $('profit-chart').setAttribute('aria-label',`累计盈亏走势，${summary.count} 次尝试，${summary.unknown?'已知估值下界':'累计盈亏'} ${money(total)}`);
   }
   function setView(next) {
-    if (next==='inventory' && auto) stopAuto();
+    if(!['lab','terminal','inventory'].includes(next))next='lab';
+    if (next!=='lab' && auto) stopAuto();
     view=next;
-    $('lab-view').hidden=view!=='lab'; $('inventory-view').hidden=view!=='inventory';
+    try {sessionStorage.setItem('caselab.view.v1',view);} catch {}
+    $('lab-view').hidden=view!=='lab'; $('terminal-view').hidden=view!=='terminal'; $('inventory-view').hidden=view!=='inventory';
     document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===view));
     if (view==='inventory') renderInventory();
+    if (view==='terminal') renderTerminal();
+  }
+  const currentTerminal=()=>terminalById[settings.selectedTerminal];
+  const activeTerminalRun=()=>terminalRuns.find(r=>r.status==='active');
+  function renderTerminal() {
+    const active=activeTerminalRun();
+    if(active&&active.terminalId!==settings.selectedTerminal) settings.selectedTerminal=active.terminalId;
+    const terminal=currentTerminal();
+    $('terminal-list').innerHTML=D.terminals.map(t=>`<button type="button" class="terminal-choice ${t.id===terminal.id?'selected':''}" data-terminal="${t.id}" ${active?'disabled':''}>${img(t,'',false)}<span><strong>${esc(t.name)}</strong><small>${esc(t.en)}</small><em>${money(E.cents(t.price))} · ${t.items.length} 款武器${t.rare.length?` + ${t.rare.length} 款手套`:''}</em></span></button>`).join('');
+    $('terminal-contents-count').textContent=`${terminal.items.length+terminal.rare.length} 款`;
+    $('terminal-contents').innerHTML=[...terminal.rare,...terminal.items].map(id=>skinCard(D.items[id])).join('');
+    $('terminal-cost-note').textContent=active?'终端已消耗 · 只能购买当前报价或跳过':`启动消耗 ${money(E.cents(terminal.price))} · 无钥匙费`;
+    $('terminal-start').hidden=!!active;
+    $('terminal-start').textContent=`启动终端机 · ${money(E.cents(terminal.price))}`;
+    $('terminal-step').textContent=active?`${String(active.step).padStart(2,'0')} / 05`:'00 / 05';
+    if(active) {
+      const r=active.offer, item=appearance(D.items[r.itemId],r), tier=E.TIERS[r.tier];
+      $('terminal-offer').innerHTML=`<div class="terminal-message"><span>ARMS DEALER</span><p>我能提供这件饰品。查看磨损和报价后再决定；跳过后无法返回。</p></div><div class="terminal-item" style="--rarity:${tier.color}"><div class="terminal-item-art">${img(item,'',false)}</div><div class="terminal-item-info"><span class="detail-tier">${tier.name}${r.stattrak?' · StatTrak™':''}</span><h2>${esc(item.name)}</h2>${specialBadge(r)}<p>${r.float===null?'无磨损等级':`${E.WEARS[r.wear]} · Float ${r.float.toFixed(8)}`} · 模板 #${r.seed}</p>${wearMeter(item,r)}<div class="terminal-prices"><span>模拟购买报价 <strong>${money(r.offerPrice)}</strong></span><span>BUFF 参考价 <strong>${money(r.value)}</strong></span></div><small>终端机实际报价未公开，此处用参考价的 90%–125% 模拟；不保证成交或盈利。</small></div></div><div class="terminal-actions"><button class="secondary-button" id="terminal-pass" type="button">跳过此报价${active.step===5?' · 结束终端机':' · 查看下一个'}</button><button class="primary-button" id="terminal-buy" type="button" ${r.offerPrice===null?'disabled':''}>购买这件 · ${money(r.offerPrice)}</button></div>`;
+      $('terminal-pass').onclick=passTerminalOffer;
+      $('terminal-buy').onclick=buyTerminalOffer;
+    } else {
+      const last=terminalRuns.at(-1);
+      $('terminal-offer').innerHTML=`<div class="terminal-idle"><img src="${esc(terminal.image)}" alt=""><span class="eyebrow">SECURE CONNECTION / READY</span><h2>${esc(terminal.name)}</h2><p>${last?.status==='passed'?'上次 5 个报价均已跳过。可再开启一台终端机。':last?.status==='bought'?'上次已购买一件饰品。可再开启一台终端机。':'一次最多查看 5 个随机报价，只能购买其中一件。跳过不能回退。'}</p></div>`;
+    }
+    const spent=terminalRuns.reduce((n,r)=>n+r.cost+(r.status==='bought'?(records.find(x=>x.index===r.acceptedIndex)?.offerCost||0):0),0);
+    const bought=terminalRuns.filter(r=>r.status==='bought').map(r=>records.find(x=>x.index===r.acceptedIndex)).filter(Boolean);
+    const value=bought.reduce((n,r)=>n+(r.netValue??0),0);
+    $('terminal-used').textContent=`${terminalRuns.length} 台`;
+    $('terminal-bought').textContent=`${bought.length} 件`;
+    $('terminal-spend').textContent=money(spent);
+    $('terminal-value').textContent=money(value);
+    $('terminal-profit').textContent=money(value-spent,true);
+    $('terminal-profit').className=colorClass(value-spent);
+  }
+  function startTerminal() {
+    if(activeTerminalRun()||busy||auto)return;
+    const t=currentTerminal();
+    const run={terminalId:t.id,cost:E.cents(t.price),step:1,status:'active',time:new Date().toISOString(),offer:E.terminalOffer(t,D.items,settings)};
+    terminalRuns.push(run);save();renderTerminal();renderStats();$('terminal-pass').focus({preventScroll:true});
+  }
+  function passTerminalOffer() {
+    const run=activeTerminalRun();if(!run)return;
+    if(run.step===5) {run.status='passed';run.offer=null;toast('已跳过全部 5 个报价，终端机结束。');}
+    else {run.step++;run.offer=E.terminalOffer(terminalById[run.terminalId],D.items,settings);}
+    save();renderTerminal();renderStats();$(run.status==='active'?'terminal-pass':'terminal-start').focus({preventScroll:true});
+  }
+  function buyTerminalOffer() {
+    const run=activeTerminalRun();if(!run||run.offer?.offerPrice===null)return;
+    const r={...run.offer};
+    r.index=records.length+1;r.priceDate=D.meta.priceModified;
+    r.caseCost=run.cost;r.keyCost=0;r.offerCost=r.offerPrice;
+    r.cost=run.cost+r.offerPrice;r.feeRate=settings.fee;
+    r.netValue=r.value===null?null:Math.round(r.value*(1-settings.fee/100));
+    r.profit=r.netValue===null?null:r.netValue-r.cost;
+    r.time=new Date().toISOString();
+    records.push(r);run.status='bought';run.acceptedIndex=r.index;run.offer=null;
+    save();renderTerminal();renderStats();renderRecent();toast('已购买，饰品与盈亏已记入库存。');
+    skinModal(r.itemId,r.index);
   }
   function renderInventory() {
     const query=$('inventory-search').value.toLowerCase().trim(), tier=$('inventory-tier').value;
@@ -200,7 +276,7 @@
       return `<tr><td><button class="inventory-item" data-skin="${item.id}" data-record="${r.index}">${img(item)}<span><strong>${r.stattrak?'<span class="orange">ST™ </span>':''}${esc(item.name)}</strong>${specialBadge(r)}<small>#${r.index} · ${esc(caseById[r.caseId].name)}</small></span></button></td><td><span class="tier-pill" style="--rarity:${t.color}">${t.name}</span></td><td>${r.wear===null?'无涂装':E.WEARS[r.wear]}<small>${r.float===null?'—':r.float.toFixed(8)}</small></td><td>${money(r.value)}</td><td>${money(r.cost)}</td><td class="${colorClass(r.profit)}">${money(r.profit,true)}</td><td>${new Date(r.time).toLocaleTimeString('zh-CN',{hour12:false})}<small>${new Date(r.time).toLocaleDateString('zh-CN')}</small></td></tr>`;
     }).join('') : '<tr><td class="inventory-empty" colspan="7">'+(records.length?'没有符合条件的饰品，换个筛选试试。':'库存还是空的。回到开箱实验室，开启你的第一箱。')+'</td></tr>';
     $('load-more').hidden=filtered.length<=pageSize;
-    $('export-button').disabled=!records.length;
+    $('export-button').disabled=!records.length&&!terminalRuns.length;
   }
   function renderResultReel(result) {
     const c=currentCase();
@@ -344,6 +420,14 @@
     });
   }
   function sourcesModal() {
+    if(window.LabI18n.lang==='en') {
+      modal(`<h2 class="modal-title">Data, odds and simulation</h2><p class="modal-subtitle">${D.cases.length} weapon cases · ${D.terminals.length} terminals · ${Object.keys(D.items).length} distinct items</p><div class="modal-body">
+        <h3>Prices and artwork</h3><p>Reference listings come from the <a href="${D.meta.sources.buff}" target="_blank" rel="noopener noreferrer">CSGO Trader BUFF163 snapshot ↗</a>, converted to CNY with the <a href="${D.meta.sources.rates}" target="_blank" rel="noopener noreferrer">same provider's exchange rates ↗</a>. Last upstream file update: ${esc(timeLabel)}. A listing is not a completed sale or a live quote. Item names, contents, Float ranges and artwork come from <a href="https://github.com/ByMykel/CSGO-API" target="_blank" rel="noopener noreferrer">CSGO-API ↗</a>.</p>
+        <h3>Weapon cases</h3><p>Rarity weights are 625:125:25:5:2, based on the <a href="https://www.csgo.com.cn/hd/1707/lotteryrecords/index.html" target="_blank" rel="noopener noreferrer">published Chinese odds ↗</a>. Eligible items in each tier are sampled uniformly, with separate simulated model and finish selection for rare knives or gloves. StatTrak™ has a simulated 10% conditional chance when supported. Float uses a piecewise community approximation informed by <a href="https://blog.csfloat.com/analysis-of-float-value-and-paint-seed-distribution-in-cs-go/" target="_blank" rel="noopener noreferrer">CSFloat's distribution research ↗</a>.</p>
+        <h3>Terminals</h3><p><a href="https://www.counter-strike.net/newsentry/514095143786120351" target="_blank" rel="noopener noreferrer">Genesis ↗</a> and <a href="https://www.counter-strike.net/newsentry/518615049848225858" target="_blank" rel="noopener noreferrer">Dead Hand ↗</a> terminal collections are in the simulator. A terminal gives up to five sequential offers; you can buy one or pass. Terminal item odds and Valve's dealer prices are unpublished, so item selection uses the available case tier weights as a simulation and the offer price is 90%–125% of the snapshot reference value. Terminal cost is charged when you start, including when you buy nothing. No key is charged.</p>
+        <h3>Patterns and accounting</h3><p>Pattern tiers and labels follow linked community guides. Fade percentages use the <a href="https://github.com/chescos/csgo-fade-percentage-calculator" target="_blank" rel="noopener noreferrer">chescos dataset ↗</a>, which can differ from BUFF's display. Pattern premiums and independent prices are explicitly simulated. Profit equals net reference value after your configured selling fee minus the opening or purchase cost. Saved records keep their original quote. No actual transaction occurs.</p></div>`);
+      return;
+    }
     const age=priceDate?(Date.now()-priceDate.getTime())/86400000:null;
     modal(`<h2 class="modal-title">真实概率，真实人品</h2><p class="modal-subtitle">${D.cases.length} 款常见武器箱 · ${Object.keys(D.items).length} 款去重饰品 · 本地快照</p><div class="modal-body">
       <h3>价格与贴图</h3><div class="source-line"><strong>BUFF163 最低在售价 · 经 CSGO Trader 聚合</strong><small>上游文件更新：${esc(timeLabel)}<br>下载时间：${esc(new Date(D.meta.builtAt).toLocaleString('zh-CN'))}<br>这是聚合快照，不是 BUFF 实时成交价。上游文件时间不保证每件商品同一时刻更新。</small><p><a href="${D.meta.sources.buff}" target="_blank" rel="noopener noreferrer">价格原始 JSON ↗</a> · <a href="https://csgotrader.app/prices/" target="_blank" rel="noopener noreferrer">数据提供方 ↗</a></p></div>
@@ -353,7 +437,8 @@
       <h3>品质概率 · 每次独立抽取</h3><table class="modal-table"><thead><tr><th>品质</th><th>权重</th><th>开出概率</th></tr></thead><tbody>${E.TIERS.map(t=>`<tr><td><span style="color:${t.color}">●</span> ${t.name}</td><td>${t.weight} / 782</td><td>${pct(t.weight/782)}</td></tr>`).join('')}</tbody></table><p>按完美世界公开品质比例 5:1、特殊与隐秘 2:5 推导，使用整数权重而非四舍五入后的百分比。枪械同品质内等概率；支持的枪械与刀具有 10% StatTrak™ 概率，手套无 StatTrak™。没有连败补偿或保底。</p><p><a href="https://www.csgo.com.cn/hd/1707/lotteryrecords/index.html" target="_blank" rel="noopener noreferrer">国服概率公示 ↗</a></p>
       <h3>磨损概率 · 社区近似模型</h3><table class="modal-table"><thead><tr><th>基准磨损</th><th>归一化 Float 区间</th><th>模型权重</th></tr></thead><tbody>${E.WEARS.map((w,i)=>`<tr><td>${w}</td><td>${E.EDGES[i].toFixed(2)} – ${E.EDGES[i+1].toFixed(2)}</td><td>${pct(E.WEIGHTS[i])}</td></tr>`).join('')}</tbody></table><p>参考 CSFloat 2020 年统计：先按权重选段，在段内均匀生成 u，再映射 Float = min + u × (max − min)。饰品磨损概率据其范围重新积分，不能把 3% / 24% / 33% / 24% / 16% 直接套给每件饰品。该模型近似统计形状，不复刻服务端 RNG 或区间缝隙，不属于 Valve 官方磨损概率。</p><p><a href="https://blog.csfloat.com/analysis-of-float-value-and-paint-seed-distribution-in-cs-go/" target="_blank" rel="noopener noreferrer">CSFloat 分布研究 ↗</a></p>
       <div class="notice">金色池先等概率选刀型/手套型号，再等概率选涂装，此为模拟假设。多普勒按具体相位使用独立报价与预览图。抽中多普勒后，宝石相位合计默认占 5%（可在设置中调整），普通相位均分其余概率、宝石之间均分；此为模拟设定，并非官方概率。淬火按各武器的社区 T1–T4 表识别，T1 可逐模板设定独立模拟价；还收录金淬火、冰火、屠夫钻石/心形、部分血网、月升星星、红色和服、印花及部分枪皮图案。模板溢价与独立金额均明确标注为模拟估价，不是市场报价。渐变采用 chescos 开源算法（Skinport / CSFloat 口径），不等同于 BUFF 百分比；不适用于渐变手套。未收录的图案按基础报价结算。未模拟超低磨溢价。图案种子 0–999。缺失报价保留为空，并提示盈亏未完整估值。</div>
-      <h3>盈亏如何计算</h3><p>单次盈亏 = 参考价 × (1 − 手续费率) − 箱价 − 钥匙费；货币按分计算。历史记录锁定开箱当时的价格和设置。参考在售价不等于实际可售金额，所有开箱只在本地模拟。</p><p>在项目目录运行 <code>python scripts/build_data.py --refresh --images</code> 可重新获取公开快照和贴图。刷新页面后新开箱使用新数据，已保存的旧记录保持原值。</p></div>`);
+      <h3>终端机玩法</h3><p><a href="https://www.counter-strike.net/newsentry/514095143786120351" target="_blank" rel="noopener noreferrer">创世纪</a>与<a href="https://www.counter-strike.net/newsentry/518615049848225858" target="_blank" rel="noopener noreferrer">死亡之手</a>终端机使用各自内容池。每台依次给出最多 5 次购买机会，只能购买 1 件；跳过不能返回。官方未公开各报价饰品的完整概率与购买价算法，本模拟使用有货品质的武器箱权重近似抽取，以参考价的 90%–125% 生成明确标注的模拟报价。启动即消耗终端机，未购买也计入亏损；无钥匙费。</p>
+      <h3>盈亏如何计算</h3><p>单次盈亏 = 参考价 × (1 − 手续费率) − 箱价 − 钥匙费；终端购买则减去终端消耗与模拟购买报价。货币按分计算。历史记录锁定开箱当时的价格和设置。参考在售价不等于实际可售金额，所有开箱只在本地模拟。</p><p>在项目目录运行 <code>python scripts/build_data.py --refresh --images</code> 可重新获取公开快照和贴图。刷新页面后新开箱使用新数据，已保存的旧记录保持原值。</p></div>`);
   }
   function patternPanel(base, pattern, record, selectedSeed) {
     const supported=base.patterns?.length||base.fade;
@@ -365,7 +450,7 @@
     const t1=(base.patterns||[]).filter(p=>p.category==='blue-gem'&&p.tier===1);
     const tiers=(base.patterns||[]).filter(p=>p.category==='blue-gem');
     const catalog=!record&&t1.length?`<details class="pattern-catalog"><summary>T1 独立模板模拟价 · 共 ${t1.length} 个</summary><p>以下为普通久经沙场的模拟价，每个模板可单独检视并设置各磨损 / StatTrak 的金额，均不代表真实成交价。</p><table class="modal-table"><thead><tr><th>模板</th><th>普通久经沙场 · 模拟价</th></tr></thead><tbody>${t1.map(p=>`<tr><td><button class="text-button" data-inspect-seed="${p.seed}">#${p.seed} ↗</button></td><td>${money(E.quote(base,{seed:p.seed,wear:2},settings).value)}</td></tr>`).join('')}</tbody></table></details>`:'';
-    const tierSummary=tiers.length?`<div class="pattern-tiers">${[1,2,3,4].map(t=>`<span>T${t} <b>${tiers.filter(p=>p.tier===t).length}</b> 个</span>`).join('')}</div>`:'';
+    const tierSummary=tiers.length?`<div class="pattern-tiers">${[1,2,3,4].map(t=>`<span>T${t} <b>${tiers.filter(p=>p.tier===t).length}</b> ${window.LabI18n.lang==='en'?'seeds':'个'}</span>`).join('')}</div>`:'';
     if (!pattern) return input+tierSummary+catalog+(selectedSeed!==null?'<p class="notice">此编号未命中已收录的特殊模板，使用普通基础报价。</p>':'');
     const multiplier=settings.patternMultipliers[`${base.id}:${pattern.seed}`]??pattern.multiplier;
     const wears=E.wearProbabilities(base);
@@ -386,14 +471,15 @@
       prices:[false,true].map(st=>[0,1,2,3,4].map(w=>{const value=quoteAt(w,st).value;return value===null?null:value/100;}))};
     const variants=base.variants||[], patterns=base.patterns||[];
     const variantOdds=E.variantProbabilities(base,settings.gemChance);
-    const c=r?caseById[r.caseId]:currentCase();
-    const probabilities=E.wearProbabilities(item), chance=E.itemProbabilities(c,D.items)[id] || 0;
+    const c=r?caseById[r.caseId]:view==='terminal'?currentTerminal():currentCase();
+    const probabilities=E.wearProbabilities(item);
+    const chance=r?.terminal||terminalById[c.id]?null:E.itemProbabilities(c,D.items)[id] || 0;
     modal(`<div class="detail-hero"><div><span class="detail-tier" style="--rarity:${E.TIERS[item.rarity].color}">${E.TIERS[item.rarity].name}${r?.stattrak?' · StatTrak™':''}</span><div class="eyebrow">${esc(item.weapon)}</div><h2 class="modal-title">${esc(item.finish)}</h2><span class="muted" style="font-size:10px">${esc(item.en)}</span></div>${img(item,'',false)}</div><div class="modal-body">
-      ${r?`<div class="notice">${specialBadge(r)}第 ${r.index} 箱 · ${esc(c.name)}<br>${r.float===null?'无磨损等级':`${E.WEARS[r.wear]} · Float ${r.float.toFixed(8)}`} · 图案 #${r.seed}<br>${r.simulation?'当时模拟估价':'当时参考价'} ${money(r.value)} · 成本 ${money(r.cost)} · 手续费 ${r.feeRate}%<br>单次盈亏 <strong class="${colorClass(r.profit)}">${money(r.profit,true)}</strong><br><small>${esc(r.priceSource||'历史聚合快照（未细分相位）')}<br>记录时间 ${esc(new Date(r.time).toLocaleString('zh-CN'))}</small></div>`:''}
+      ${r?`<div class="notice">${specialBadge(r)}${r.terminal?'终端购买':'第 '+r.index+' 箱'} · ${esc(c.name)}<br>${r.float===null?'无磨损等级':`${E.WEARS[r.wear]} · Float ${r.float.toFixed(8)}`} · 图案 #${r.seed}<br>${r.simulation?'当时模拟估价':'当时参考价'} ${money(r.value)} · ${r.terminal?`模拟购买报价 ${money(r.offerCost)} · 终端消耗 ${money(r.caseCost)}`:`成本 ${money(r.cost)}`} · 手续费 ${r.feeRate}%<br>单次盈亏 <strong class="${colorClass(r.profit)}">${money(r.profit,true)}</strong><br><small>${esc(r.priceSource||'历史聚合快照（未细分相位）')}<br>记录时间 ${esc(new Date(r.time).toLocaleString('zh-CN'))}</small></div>`:''}
       ${!r&&(variants.length||patterns.length)?`<div class="variant-panel"><label for="special-select">相位 / 特殊模板</label><select id="special-select">${variants.length?'':`<option value="">普通图案 · 基础报价</option>`}${variants.map(v=>`<option value="${esc(v.key)}" ${choice===v.key?'selected':''}>${esc(v.label)}${v.gem?' · 宝石相位':''}</option>`).join('')}${patterns.map(p=>`<option value="seed:${p.seed}" ${selectedSeed===p.seed?'selected':''}>${p.label.includes('#')?'':`#${p.seed} · `}${esc(p.label)} · 模拟估价</option>`).join('')}</select></div>`:''}
       ${variant?`<div class="notice">${esc(variant.label)} · 独立相位报价 · ${dateLabel}<br>抽中此多普勒后，相位占比 ${pct(variantOdds[variants.indexOf(variant)])}（模拟设定，可在模拟设置中调整宝石总占比）。缺失报价保留为空。</div>`:''}
       ${patternPanel(base,pattern,r,selectedSeed)}
-      <p>当前箱中基础掉落概率 <strong>${pct(chance)}</strong>（含普通与 StatTrak™ 合计）${item.stattrak?' · 其中 StatTrak™ 占 10%':''}。${item.rarity===4?'金色池内部采用型号 / 涂装均分假设。':''}</p>
+      <p>${chance===null?'终端机各报价的饰品概率未公布；此页面仅模拟内容池与报价。':`当前箱中基础掉落概率 <strong>${pct(chance)}</strong>（含普通与 StatTrak™ 合计）${item.stattrak?' · 其中 StatTrak™ 占 10%':''}。${item.rarity===4?'金色池内部采用型号 / 涂装均分假设。':''}`}</p>
       ${item.min===null?'<p>原版刀无磨损等级，所有报价均指同一件原版物品。</p>':`<h3>磨损范围 ${item.min.toFixed(2)} – ${item.max.toFixed(2)}</h3>${wearMeter(item,r)}`}
       <h3>${pattern?'模板价格预览':'按磨损参考价'} <span class="muted" style="font-size:10px">${pattern?'含模拟设定，请查看上方计价说明':'BUFF 聚合'} · ${dateLabel}</span></h3><table class="modal-table"><thead><tr><th>磨损</th><th>普通</th><th>StatTrak™</th><th>条件磨损概率</th></tr></thead><tbody>${(item.min===null?[0]:[0,1,2,3,4]).map(i=>`<tr><td>${item.min===null?'无涂装':E.WEARS[i]}</td><td>${item.min!==null&&!probabilities[i]?'不适用':money(item.prices[0][i]===null?null:E.cents(item.prices[0][i]))}</td><td>${!item.stattrak||item.min!==null&&!probabilities[i]?'不适用':money(item.prices[1][i]===null?null:E.cents(item.prices[1][i]))}</td><td>${item.min===null?'100.00%':pct(probabilities[i])}</td></tr>`).join('')}</tbody></table><p>磨损概率是已抽中此涂装后的条件概率，按 Float 范围和社区近似模型计算。${r?'此表为当前设置下的价格预览，上方记录保留当时的结算价。':''}</p><div class="detail-links"><a class="secondary-button" href="https://buff.163.com/market/csgo#tab=selling&page_num=1&search=${encodeURIComponent(item.en)}" target="_blank" rel="noopener noreferrer">在 BUFF 搜索 ↗</a><a class="secondary-button" href="https://steamcommunity.com/market/search?appid=730&q=${encodeURIComponent(item.en)}" target="_blank" rel="noopener noreferrer">Steam 市场 ↗</a></div></div>`);
     if ($('special-select')) $('special-select').onchange=event=>{
@@ -439,14 +525,18 @@
     };
   }
   function exportCSV() {
-    if (!records.length) return;
-    const headers=['序号','时间','武器箱','饰品','英文名','品质','StatTrak','磨损','Float','图案种子','箱价_CNY','钥匙_CNY','成本_CNY','参考价_CNY','手续费百分比','产出净值_CNY','盈亏_CNY','价格快照时间','特殊模板','相位','估价来源','模拟估价','溢价倍数','模板档位','模板类别','渐变百分比','模板依据'];
-    const rows=records.map(r=>{const s=D.items[r.itemId];return [r.index,r.time,caseById[r.caseId].name,s.name,s.en,E.TIERS[r.tier].name,r.stattrak?'是':'否',r.wear===null?'无涂装':E.WEARS[r.wear],r.float??'',r.seed,r.caseCost/100,r.keyCost/100,r.cost/100,r.value===null?'':r.value/100,r.feeRate,r.netValue===null?'':r.netValue/100,r.profit===null?'':r.profit/100,r.priceDate??'',r.specialLabel??'',r.variantKey??'',r.priceSource??'历史快照',r.simulation?'是':'否',r.multiplier??'',r.patternTier??'',r.patternCategory??'',r.fadePercentage??'',r.patternSource??''];});
+    if (!records.length&&!terminalRuns.length) return;
+    const headers=['序号','时间','武器箱/终端机','饰品','英文名','品质','StatTrak','磨损','Float','图案种子','箱价/终端消耗_CNY','钥匙_CNY','成本_CNY','参考价_CNY','手续费百分比','产出净值_CNY','盈亏_CNY','价格快照时间','特殊模板','相位','估价来源','模拟估价','溢价倍数','模板档位','模板类别','渐变百分比','模板依据','玩法','终端模拟报价_CNY'];
+    const rows=records.map(r=>{const s=D.items[r.itemId];return [r.index,r.time,caseById[r.caseId].name,s.name,s.en,E.TIERS[r.tier].name,r.stattrak?'是':'否',r.wear===null?'无涂装':E.WEARS[r.wear],r.float??'',r.seed,r.caseCost/100,r.keyCost/100,r.cost/100,r.value===null?'':r.value/100,r.feeRate,r.netValue===null?'':r.netValue/100,r.profit===null?'':r.profit/100,r.priceDate??'',r.specialLabel??'',r.variantKey??'',r.priceSource??'历史快照',r.simulation?'是':'否',r.multiplier??'',r.patternTier??'',r.patternCategory??'',r.fadePercentage??'',r.patternSource??'',r.terminal?'终端机':'武器箱',r.terminal?r.offerCost/100:''];});
+    terminalRuns.forEach((run,i)=>{if(run.status!=='bought')rows.push([`T${i+1}`,run.time,terminalById[run.terminalId].name,'','','','','','','',run.cost/100,0,run.cost/100,'',0,0,-run.cost/100,D.meta.priceModified,'','','终端消耗','否','','','','','','终端未购买','']);});
+    rows.sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
     const quote=v=>'"'+String(v).replaceAll('"','""')+'"';
     const blob=new Blob(['\ufeff'+[headers,...rows].map(row=>row.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`case-lab-${new Date().toISOString().slice(0,10)}.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(`已生成 ${records.length} 条记录的 CSV 下载。`);
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`case-lab-${new Date().toISOString().slice(0,10)}.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(`已生成 ${rows.length} 条记录的 CSV 下载。`);
   }
   $('case-search').addEventListener('input',renderCases);
+  $('terminal-list').onclick=event=>{const button=event.target.closest('[data-terminal]');if(!button||activeTerminalRun())return;settings.selectedTerminal=button.dataset.terminal;save();renderTerminal();};
+  $('terminal-start').onclick=startTerminal;
   $('case-prev').onclick=()=>$('case-rail').scrollBy({left:-$('case-rail').clientWidth*.8,behavior:reducedMotion.matches?'instant':'smooth'});
   $('case-next').onclick=()=>$('case-rail').scrollBy({left:$('case-rail').clientWidth*.8,behavior:reducedMotion.matches?'instant':'smooth'});
   document.addEventListener('click',event=>{
@@ -465,6 +555,7 @@
     auto=true;remaining=Number($('auto-count').value);performOpen(1);
   };
   $('settings-button').onclick=settingsModal;
+  $('language-button').onclick=()=>window.LabI18n.toggle(view);
   for(const id of ['nav-sources','snapshot-button','footer-sources'])$(id).onclick=sourcesModal;
   $('case-info').onclick=()=>$('contents-section').scrollIntoView({behavior:reducedMotion.matches?'instant':'smooth',block:'start'});
   $('view-inventory').onclick=()=>{setView('inventory');window.scrollTo({top:0,behavior:'instant'});};
@@ -472,10 +563,10 @@
   $('modal').addEventListener('click',e=>{if(e.target===$('modal')){const r=$('modal').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('modal').close();}});
   $('reset-button').onclick=()=>{
     if(busy||auto)return;
-    if(!records.length){toast('当前实验还没有开箱记录。');return;}
-    modal(`<h2 class="modal-title">开始一次新的实验？</h2><p class="modal-subtitle">将清空当前 ${records.length} 条开箱记录、库存和累计统计。武器箱与成本设置会保留。你可以先导出 CSV 留作记录。</p><div class="settings-actions"><button class="secondary-button" id="reset-export">先导出记录</button><button class="danger-button" id="confirm-reset">清空并重新开始</button></div>`);
+    if(!records.length&&!terminalRuns.length){toast('当前实验还没有记录。');return;}
+    modal(`<h2 class="modal-title">开始一次新的实验？</h2><p class="modal-subtitle">将清空当前 ${records.length} 件库存、${terminalRuns.length} 台终端机记录和累计统计。武器箱与成本设置会保留。你可以先导出 CSV 留作记录。</p><div class="settings-actions"><button class="secondary-button" id="reset-export">先导出记录</button><button class="danger-button" id="confirm-reset">清空并重新开始</button></div>`);
     $('reset-export').onclick=exportCSV;
-    $('confirm-reset').onclick=()=>{records=[];lastRevealed=null;save();renderStats();renderRecent();renderIdleReel();$('result-bar').innerHTML='<span class="result-status"><span class="tiny-dot"></span> 新实验已就绪</span><span class="muted">从零开始，试试新的手气。</span>';$('modal').close();toast('实验记录已重置。');};
+    $('confirm-reset').onclick=()=>{records=[];terminalRuns=[];lastRevealed=null;save();renderStats();renderRecent();renderTerminal();renderIdleReel();$('result-bar').innerHTML='<span class="result-status"><span class="tiny-dot"></span> 新实验已就绪</span><span class="muted">从零开始，试试新的手气。</span>';$('modal').close();toast('实验记录已重置。');};
   };
   for (const id of ['inventory-search','inventory-tier','inventory-sort']) $(id).addEventListener(id==='inventory-search'?'input':'change',()=>{pageSize=100;renderInventory();});
   $('load-more').onclick=()=>{pageSize+=100;renderInventory();};
@@ -489,5 +580,7 @@
   reducedMotion.addEventListener('change',event=>{if(event.matches&&animation)animation.finish();});
   window.addEventListener('resize',()=>{if(reelLayout)alignReel();else if(!busy)renderIdleReel();});
   $('snapshot-date').textContent=`快照 ${dateLabel}`;
-  selectCase(settings.selected);renderStats();renderRecent();
+  if(activeTerminalRun())settings.selectedTerminal=activeTerminalRun().terminalId;
+  let initialView='lab';try {initialView=sessionStorage.getItem('caselab.view.v1')||'lab';} catch {}
+  selectCase(settings.selected);renderStats();renderRecent();renderTerminal();setView(initialView);
 })();

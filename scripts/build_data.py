@@ -133,12 +133,27 @@ for name in NAMES:
         items[id_]['rarity'] = 4
     cases.append(case)
 
+# Terminals offer one purchasable item from their own collection. They are not
+# weapon cases and never use a key or the case opening probability table.
+terminals = []
+for name in ['Sealed Genesis Terminal', 'Sealed Dead Hand Terminal']:
+    c = next(c for c in loaded['crates_en'] if c['name'] == name)
+    terminal = {'id': c['id'], 'name': crates_zh[c['id']]['name'], 'en': name,
+                'image': image_path(c['id'], c['image']), 'remoteImage': c['image'] + '/512fx384f',
+                'price': price_for(c['market_hash_name']), 'release': c['first_sale_date'],
+                'items': [add_skin(en[x['id']]) for x in c['contains']],
+                'rare': [add_skin(en[x['id']]) for x in c['contains_rare']]}
+    assert terminal['price'] is not None, 'Missing terminal price: ' + name
+    for id_ in terminal['rare']:
+        items[id_]['rarity'] = 4
+    terminals.append(terminal)
+
 snapshot = {'meta': {'builtAt': dt.datetime.now(dt.timezone.utc).isoformat(),
                     'patternsUpdatedAt': special_patterns['updatedAt'],
                     'priceModified': metadata.get('buff', {}).get('lastModified'),
                     'rateModified': metadata.get('rates', {}).get('lastModified'),
                     'usdCny': rate, 'sources': SOURCES, 'priceSource': 'BUFF163 · CSGO Trader 聚合快照'},
-            'cases': cases, 'items': items}
+            'cases': cases, 'terminals': terminals, 'items': items}
 (DATA / 'catalog.js').write_text('window.CS2_DATA = ' + json.dumps(snapshot, ensure_ascii=False, separators=(',', ':')) + ';\n', 'utf-8')
 (DATA / 'asset-manifest.json').write_text(json.dumps(assets, indent=2), 'utf-8')
 # Retain just the upstream phase quotes needed for reproducible tests on a clean clone.
